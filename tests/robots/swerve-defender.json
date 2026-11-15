@@ -1,0 +1,49 @@
+{
+  "id": "swerve-defender",
+  "name": "Swerve Defender",
+  "description": "Fast and heavy with a raisable shot blocker. Collects a few pieces but cannot shoot.",
+  "official": true,
+  "color": "#71717a",
+  "chassis": {
+    "length": 0.72,
+    "width": 0.72,
+    "height": 0.24,
+    "mass": 63,
+    "groundClearance": 0.07,
+    "bumperThickness": 0.08
+  },
+  "drivetrain": {
+    "type": "swerve",
+    "wheelBase": 0.58,
+    "trackWidth": 0.58,
+    "wheelRadius": 0.05,
+    "maxSpeed": 5.4,
+    "maxAccel": 11,
+    "grip": 1.2,
+    "maxAngularSpeed": 10
+  },
+  "subsystems": [
+    {
+      "type": "blocker",
+      "side": "front",
+      "width": 0.7,
+      "height": 0.75
+    },
+    {
+      "type": "intake",
+      "side": "back",
+      "width": 0.5,
+      "reach": 0.2,
+      "rate": 6
+    },
+    {
+      "type": "hopper",
+      "capacity": 8
+    },
+    {
+      "type": "climber",
+      "maxLevel": 3,
+      "speed": 0.6
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "swerve-shooter",
+  "name": "Swerve Shooter",
+  "description": "All-rounder. Front intake and a turret that aims and sets its own shot speed.",
+  "official": true,
+  "color": "#9aa3af",
+  "chassis": {
+    "length": 0.7,
+    "width": 0.7,
+    "height": 0.24,
+    "mass": 58,
+    "groundClearance": 0.07,
+    "bumperThickness": 0.08
+  },
+  "drivetrain": {
+    "type": "swerve",
+    "wheelBase": 0.56,
+    "trackWidth": 0.56,
+    "wheelRadius": 0.05,
+    "maxSpeed": 5,
+    "maxAccel": 10,
+    "grip": 1.15,
+    "maxAngularSpeed": 9
+  },
+  "subsystems": [
+    {
+      "type": "intake",
+      "side": "front",
+      "width": 0.6,
+      "reach": 0.22,
+      "rate": 10
+    },
+    {
+      "type": "hopper",
+      "capacity": 24
+    },
+    {
+      "type": "climber",
+      "maxLevel": 2,
+      "speed": 0.5
+    },
+    {
+      "type": "shooter",
+      "height": 0.6,
+      "pitch": 62,
+      "speed": 9.5,
+      "rate": 8,
+      "spread": 1,
+      "turret": true,
+      "autoRange": true
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "id": "tank-hauler",
+  "name": "Tank Hauler",
+  "description": "Carries the most. Wide intake, expanding hopper and a fixed shooter you aim by turning the robot.",
+  "official": true,
+  "color": "#a8a29e",
+  "chassis": {
+    "length": 0.8,
+    "width": 0.68,
+    "height": 0.24,
+    "mass": 54,
+    "groundClearance": 0.07,
+    "bumperThickness": 0.08
+  },
+  "drivetrain": {
+    "type": "tank",
+    "wheelBase": 0.5,
+    "trackWidth": 0.58,
+    "wheelRadius": 0.05,
+    "maxSpeed": 4.3,
+    "maxAccel": 8,
+    "grip": 1.1,
+    "lateralGrip": 0.35,
+    "turnScale": 0.6
+  },
+  "subsystems": [
+    {
+      "type": "intake",
+      "side": "front",
+      "width": 0.66,
+      "reach": 0.25,
+      "rate": 12
+    },
+    {
+      "type": "hopper",
+      "capacity": 30,
+      "expandable": true,
+      "expandSide": "back",
+      "expandDistance": 0.25,
+      "expandedCapacity": 50
+    },
+    {
+      "type": "shooter",
+      "height": 0.55,
+      "pitch": 50,
+      "speed": 7,
+      "rate": 5,
+      "spread": 2.5
+    },
+    {
+      "type": "climber",
+      "maxLevel": 1,
+      "speed": 0.4
+    }
+  ]
+}
