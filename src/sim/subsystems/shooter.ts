@@ -42,6 +42,42 @@ const FACE_ANGLE: Record<Side, number> = { front: 0, left: 90, back: 180, right:
 const TURN_GAIN = 8;
 /** A fixed shooter holds its fire until the robot points this close to the target. */
 const FIRE_WINDOW = 3 * DEG;
+/** A piece leaves this far along the launch direction from the top of the box. */
+const RELEASE_OFFSET = 0.12;
+/** A shooter that adjusts its launch angle never goes flatter than this. */
+const MIN_PITCH = 10 * DEG;
+
+/**
+ * The launch angle and speed that carry a piece from the top of the shooter
+ * to a point `distance` away and `rise` higher. The shooter's own angle is
+ * the steepest it can launch at. It is used whenever the shot can reach;
+ * a shot too far for the top speed at that angle is launched flatter, by as
+ * little as it takes.
+ */
+export function launchFor(distance: number, rise: number, maxPitch: number, topSpeed: number): { pitch: number; speed: number } {
+  // The speed whose arc at this angle passes through the point, measured from where the piece is let go.
+  const speedAt = (pitch: number): number => {
+    const d = distance - RELEASE_OFFSET * Math.cos(pitch);
+    const h = rise - RELEASE_OFFSET * Math.sin(pitch);
+    const denominator = 2 * Math.cos(pitch) ** 2 * (d * Math.tan(pitch) - h);
+    return denominator > 0 && d > 0 ? Math.sqrt((GRAVITY * d ** 2) / denominator) : Infinity;
+  };
+  const steepest = speedAt(maxPitch);
+  if (steepest <= topSpeed) return { pitch: maxPitch, speed: steepest };
+
+  // At top speed, the steepest angle that still reaches. If none does, the angle that carries furthest.
+  const v2 = topSpeed ** 2;
+  const reach = v2 ** 2 - GRAVITY * (GRAVITY * distance ** 2 + 2 * rise * v2);
+  const tangent = (v2 + Math.sqrt(Math.max(0, reach))) / (GRAVITY * Math.max(distance, 0.01));
+  let pitch = clamp(Math.atan(tangent), Math.min(MIN_PITCH, maxPitch), maxPitch);
+  // The piece is let go a little way along the launch direction, which the formula above leaves out.
+  for (let i = 0; i < 4 && reach > 0; i++) {
+    const needed = speedAt(pitch);
+    if (needed <= topSpeed) break;
+    pitch = Math.max(Math.min(MIN_PITCH, maxPitch), pitch - 0.5 * DEG);
+  }
+  return { pitch, speed: Math.min(topSpeed, speedAt(pitch)) };
+}
 
 interface Aim {
   /** Where the middle of the shooter's top is, in the world. */
@@ -49,6 +85,8 @@ interface Aim {
   /** World direction to launch in, counter-clockwise from +X. Null when there is nothing to aim at. */
   bearing: number | null;
   speed: number;
+  /** Launch angle above level, in radians. */
+  pitch: number;
 }
 
 /**
@@ -99,33 +137,31 @@ class Shooter implements Subsystem {
     const s = this.settings;
     const muzzle = add(robot.position(), rotate(robot.rotation(), this.muzzle));
     const aim = sim.aimFor(robot.alliance, muzzle, robot);
-    if (!aim) return { muzzle, bearing: null, speed: s.speed };
+    const fixedPitch = s.pitch * DEG;
+    if (!aim) return { muzzle, bearing: null, speed: s.speed, pitch: fixedPitch };
     const target = aim.point;
     // A pass is lobbed to a spot on the floor, so its speed always suits the distance.
     const ranging = s.autoRange || aim.pass;
 
-    const pitch = s.pitch * DEG;
-    const launchSpeed = (point: Vec3): number => {
-      if (!ranging) return s.speed;
-      // Pick the launch speed whose arc passes through the point.
+    const launch = (point: Vec3): { pitch: number; speed: number } => {
+      if (!ranging) return { pitch: fixedPitch, speed: s.speed };
+      // Pick the launch whose arc passes through the point.
       const distance = Math.hypot(point.x - muzzle.x, point.z - muzzle.z);
-      const rise = point.y - muzzle.y;
-      const denominator = 2 * Math.cos(pitch) ** 2 * (distance * Math.tan(pitch) - rise);
-      return denominator > 0 ? Math.min(s.speed, Math.sqrt((GRAVITY * distance ** 2) / denominator)) : s.speed;
+      return launchFor(distance, point.y - muzzle.y, fixedPitch, s.speed);
     };
 
     // Aim at where the target appears to be once the robot's motion is taken off the shot.
     const share = s.moveAccuracy / 100;
     const drift = robot.pointVelocity(muzzle);
     let point = target;
-    let speed = launchSpeed(point);
+    let shot = launch(point);
     for (let i = 0; i < 3 && share > 0; i++) {
       const distance = Math.hypot(point.x - muzzle.x, point.z - muzzle.z);
-      const flightTime = distance / (speed * Math.cos(pitch));
+      const flightTime = distance / (shot.speed * Math.cos(shot.pitch));
       point = v3(target.x - drift.x * flightTime * share, target.y, target.z - drift.z * flightTime * share);
-      speed = launchSpeed(point);
+      shot = launch(point);
     }
-    return { muzzle, bearing: Math.atan2(-(point.z - muzzle.z), point.x - muzzle.x), speed };
+    return { muzzle, bearing: Math.atan2(-(point.z - muzzle.z), point.x - muzzle.x), ...shot };
   }
 
   /** For a fixed shooter: how fast the robot should turn so its shooting face points at the target. */
@@ -193,7 +229,7 @@ class Shooter implements Subsystem {
     const rot = robot.rotation();
     // A shooter that corrects for tilt launches as if the robot stood level, however it is leaning.
     const launchRot = s.tiltCorrection ? quatFromYaw(robot.heading()) : rot;
-    const pitch = s.pitch * DEG;
+    const pitch = aim.pitch;
     const wobble = () => (sim.random() - 0.5) * 2 * s.spread * DEG;
     for (let lane = 0; lane < s.lanes; lane++) {
       if (this.cooldowns[lane] > 0) continue;
@@ -210,7 +246,7 @@ class Shooter implements Subsystem {
       const from = add(aim.muzzle, rotate(rot, v3(Math.sin(this.yaw) * offset, 0, Math.cos(this.yaw) * offset)));
       // The piece inherits the robot's own motion, so shooting on the move drifts.
       const velocity = add(robot.pointVelocity(from), scale(dir, aim.speed));
-      sim.pieces.release(piece, add(from, scale(dir, 0.12)), velocity);
+      sim.pieces.release(piece, add(from, scale(dir, RELEASE_OFFSET)), velocity);
       // Uneven gaps keep the lanes from falling back into step. The average rate is unchanged.
       this.cooldowns[lane] = (1 + (sim.random() - 0.5) * 2 * (s.timingJitter / 100)) / rate;
     }
@@ -246,7 +282,7 @@ export const shooterSpec: SubsystemSpec = {
       ],
     },
     { key: 'yaw', label: 'Angle off that face', kind: 'number', default: 0, min: -45, max: 45, unit: '°' },
-    { key: 'pitch', label: 'Launch angle', kind: 'number', default: 60, min: 10, max: 85, unit: '°' },
+    { key: 'pitch', label: 'Steepest launch angle', kind: 'number', default: 60, min: 10, max: 85, unit: '°' },
     { key: 'speed', label: 'Top launch speed', kind: 'number', default: 9, min: 1, max: 18, unit: 'm/s' },
     { key: 'lanes', label: 'Pieces wide', kind: 'number', default: 1, min: 1, max: 6, step: 1, unit: 'lanes' },
     { key: 'rate', label: 'Fire rate, each lane', kind: 'number', default: 6, min: 0.5, max: 25, unit: 'pieces/s' },
@@ -255,7 +291,7 @@ export const shooterSpec: SubsystemSpec = {
     { key: 'moveAccuracy', label: 'Shoot on the Move', kind: 'number', default: 50, min: 0, max: 100, step: 1, unit: '%' },
     { key: 'turret', label: 'Turret', kind: 'boolean', default: false },
     { key: 'turretSpeed', label: 'Turret turn speed', kind: 'number', default: 360, min: 30, max: 1080, step: 10, unit: '°/s', showIf: 'turret' },
-    { key: 'autoRange', label: 'Adjusts speed for distance', kind: 'boolean', default: false },
+    { key: 'autoRange', label: 'Adjusts speed and angle for distance', kind: 'boolean', default: false },
     { key: 'slowInAuto', label: 'Different fire rate in auto', kind: 'boolean', default: false },
     { key: 'autoRate', label: 'Fire rate in auto, each lane', kind: 'number', default: 3, min: 0.5, max: 25, unit: 'pieces/s', showIf: 'slowInAuto' },
     { key: 'tiltCorrection', label: 'Corrects for the robot leaning (on the bump or on fuel)', kind: 'boolean', default: false },

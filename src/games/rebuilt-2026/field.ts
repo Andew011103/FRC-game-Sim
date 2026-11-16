@@ -386,7 +386,8 @@ export const goals: Goal[] = ALLIANCES.map(goal);
 
 export const targets: Target[] = ALLIANCES.map((alliance) => ({
   alliance,
-  position: [hubX(alliance), HUB_HEIGHT + 0.2, 0],
+  // The middle of the opening, so a shot that is neither long nor short drops straight in.
+  position: [hubX(alliance), HUB_HEIGHT, 0],
 }));
 
 /** Robots start in their alliance zone, lined up with a bump. */

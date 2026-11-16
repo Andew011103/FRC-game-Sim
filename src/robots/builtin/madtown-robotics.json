@@ -12,7 +12,7 @@
     "width": 0.6,
     "height": 0.13,
     "groundClearance": 0.07,
-    "mass": 70,
+    "mass": 60,
     "bumperFront": 0.08,
     "bumperBack": 0.08,
     "bumperLeft": 0.08,
@@ -24,10 +24,10 @@
     "wheelBase": 0.6799999999999999,
     "trackWidth": 0.45999999999999996,
     "wheelRadius": 0.05,
-    "maxSpeed": 8,
-    "maxAccel": 10,
-    "grip": 1.15,
-    "maxAngularSpeed": 9
+    "maxSpeed": 6.3,
+    "maxAccel": 12.5,
+    "grip": 1.21,
+    "maxAngularSpeed": 12
   },
   "subsystems": [
     {
@@ -39,7 +39,7 @@
       "sizeZ": 0.6,
       "sizeY": 0.18,
       "color": "#5c5c5c",
-      "rate": 18.9,
+      "rate": 19.5,
       "reach": 0.04,
       "outtake": false,
       "outtakeDirection": "front",
@@ -78,7 +78,7 @@
       "face": "front",
       "yaw": 0,
       "pitch": 63,
-      "speed": 17,
+      "speed": 10.5,
       "lanes": 1,
       "rate": 12.6,
       "spread": 0.6,
@@ -86,7 +86,10 @@
       "moveAccuracy": 91,
       "turret": true,
       "turretSpeed": 850,
-      "autoRange": true
+      "autoRange": true,
+      "slowInAuto": false,
+      "autoRate": 3,
+      "tiltCorrection": false
     },
     {
       "type": "blocker",

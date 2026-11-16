@@ -39,8 +39,8 @@
       "sizeZ": 0.66,
       "sizeY": 0.18,
       "color": "#454545",
-      "rate": 13.6,
-      "reach": 0.03,
+      "rate": 18,
+      "reach": 0.04,
       "outtake": false,
       "outtakeDirection": "away",
       "outtakeSpeed": 3
@@ -77,16 +77,19 @@
       "color": "#454545",
       "face": "front",
       "yaw": 0,
-      "pitch": 67,
+      "pitch": 68,
       "speed": 15.6,
       "lanes": 3,
       "rate": 7,
-      "spread": 2.4,
+      "spread": 3.3,
       "timingJitter": 37,
       "moveAccuracy": 0,
       "turret": false,
       "turretSpeed": 360,
-      "autoRange": true
+      "autoRange": true,
+      "slowInAuto": false,
+      "autoRate": 3,
+      "tiltCorrection": false
     }
   ]
 }
