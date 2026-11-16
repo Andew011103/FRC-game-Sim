@@ -20,6 +20,8 @@ export class PieceSet {
   readonly colors: string[] = [];
   /** Index of the robot holding each piece, -1 when loose, -2 when in reserve. */
   readonly heldBy: number[] = [];
+  /** The robot that last had each piece inside it, or -1. Says whose score a piece is when it lands in a goal. */
+  readonly lastRobot: number[] = [];
   /** Positions before and after the latest step, three numbers per piece. */
   readonly prev: Float32Array;
   readonly cur: Float32Array;
@@ -62,6 +64,7 @@ export class PieceSet {
   hold(i: number, robotIndex: number): void {
     this.bodies[i].setEnabled(false);
     this.heldBy[i] = robotIndex;
+    if (robotIndex >= 0) this.lastRobot[i] = robotIndex;
   }
 
   /** Hands a spare piece to a robot. Returns its index, or undefined when none are left. */
@@ -69,6 +72,7 @@ export class PieceSet {
     const i = this.heldBy.indexOf(RESERVE);
     if (i === -1) return undefined;
     this.heldBy[i] = robotIndex;
+    this.lastRobot[i] = robotIndex;
     return i;
   }
 
@@ -107,5 +111,6 @@ export class PieceSet {
     this.radii.push(group.radius);
     this.colors.push(group.color);
     this.heldBy.push(state);
+    this.lastRobot.push(-1);
   }
 }

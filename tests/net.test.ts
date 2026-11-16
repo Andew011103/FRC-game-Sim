@@ -163,12 +163,44 @@ describe('multiplayer', () => {
 
 describe('player record', () => {
   it('adds up finished matches', async () => {
-    const { EMPTY_STATS, favouriteRobot, withMatch } = await import('../src/stats');
-    let stats = withMatch(EMPTY_STATS, { alliance: 'red', blue: 40, red: 90, robot: 'Simbotics' });
-    stats = withMatch(stats, { alliance: 'blue', blue: 10, red: 30, robot: 'Simbotics' });
-    stats = withMatch(stats, { alliance: 'blue', blue: 20, red: 20, robot: 'Cheesy Poofs' });
+    const { EMPTY_STATS, favouriteRobot, topRobots, withMatch } = await import('../src/stats');
+    const multi = { single: false, solo: null };
+    let stats = withMatch(EMPTY_STATS, { ...multi, alliance: 'red', blue: 40, red: 90, robot: 'Simbotics', solo: 50 });
+    stats = withMatch(stats, { ...multi, alliance: 'blue', blue: 10, red: 30, robot: 'Simbotics', solo: 10 });
+    // An older match, from before each robot's own score was kept, does not count toward the average.
+    stats = withMatch(stats, { ...multi, alliance: 'blue', blue: 20, red: 20, robot: 'Cheesy Poofs' });
+    stats = withMatch(stats, { alliance: 'blue', blue: 300, red: 0, robot: 'Cheesy Poofs', single: true, solo: null });
+    stats = withMatch(stats, { alliance: 'blue', blue: 120, red: 0, robot: 'Simbotics', single: true, solo: null });
     expect(stats).toMatchObject({ matches: 3, wins: 1, losses: 1, ties: 1, bestScore: 90, totalScore: 120 });
+    expect(stats).toMatchObject({ soloTotal: 60, soloMatches: 2, singleMatches: 2, singleBest: 300 });
+    expect(topRobots(stats)).toEqual([
+      ['Simbotics', 3],
+      ['Cheesy Poofs', 2],
+    ]);
     expect(favouriteRobot(stats)).toBe('Simbotics');
     expect(favouriteRobot(EMPTY_STATS)).toBeNull();
+  });
+});
+
+describe("each robot's own score", () => {
+  beforeAll(() => initPhysics());
+
+  it('credits fuel to the robot that shot it, and reaches other players', () => {
+    const sim = buildNetWorld(setup());
+    const match = sim.match!;
+    const goal = sim.game.goals!.find((g) => g.alliance === 'blue')!;
+    const drop = (piece: number) =>
+      sim.pieces.release(piece, { x: (goal.min[0] + goal.max[0]) / 2, y: goal.max[1] - 0.05, z: (goal.min[2] + goal.max[2]) / 2 }, { x: 0, y: 0, z: 0 });
+    // The blue robot's preload counts for it; a loose piece that falls in counts for nobody.
+    const mine = sim.robots[0].takePiece()!;
+    drop(mine);
+    const loose = sim.pieces.heldBy.indexOf(-1);
+    for (let i = 0; i < 90; i++) sim.step([]);
+    drop(loose);
+    for (let i = 0; i < 90; i++) sim.step([]);
+    expect(match.score('blue')).toBe(2);
+    expect(match.solo[0]).toBe(1);
+    expect(match.solo[1] ?? 0).toBe(0);
+    sim.dispose();
   });
 });

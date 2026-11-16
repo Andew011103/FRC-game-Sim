@@ -25,6 +25,7 @@ export type Screen =
   | 'home'
   | 'singleplayer'
   | 'multiplayer'
+  | 'record'
   | 'robots'
   | 'rules'
   | 'settings'
@@ -90,7 +91,13 @@ export interface RoomView {
   myId: number;
   /** Whether a match has been started. */
   playing: boolean;
-  players: { id: number; name: string; robot: string; alliance: Alliance }[];
+  players: { id: number; name: string; robot: string; alliance: Alliance; accountId?: string }[];
+}
+
+/** Another player whose record can be looked up. */
+export interface PlayerRef {
+  accountId: string;
+  name: string;
 }
 
 /** The player's account, when they are signed in. */
@@ -144,6 +151,11 @@ interface GameState {
   setAccount: (account: AccountView | null) => void;
   setRecord: (record: PlayerStats) => void;
   setAccountNote: (note: string | null) => void;
+  /** Whose record the record screen shows: another player's, or null for this player's own. */
+  recordOf: PlayerRef | null;
+  /** The screen the record screen goes back to. */
+  recordReturn: Screen;
+  showRecord: (player: PlayerRef | null) => void;
   /** Robots the player made in the builder, saved in this browser. */
   customRobots: RobotDefinition[];
   /** Adds a custom robot, or replaces the one with the same id. */
@@ -206,6 +218,15 @@ export const useGame = create<GameState>((set) => ({
   setAccount: (account) => set({ account, accountNote: null }),
   setRecord: (record) => set({ record }),
   setAccountNote: (accountNote) => set({ accountNote }),
+  recordOf: null,
+  recordReturn: 'home',
+  showRecord: (recordOf) =>
+    set((state) => ({
+      recordOf,
+      screen: 'record',
+      // Opening one record from another keeps the way back to where the player started.
+      recordReturn: state.screen === 'record' ? state.recordReturn : state.screen,
+    })),
   customRobots: loadCustomRobots(),
   saveRobot: (robot) =>
     set((state) => {

@@ -1,23 +1,42 @@
 import type { Alliance } from './games/types';
 
-// A player's record over the multiplayer matches they have finished. For now
-// it is kept in this browser.
+// A player's record over the matches they have finished. Signed in, it is
+// worked out from their account; otherwise it is kept in this browser.
 
 const STORAGE_KEY = 'drive-practice.stats';
 
 export interface PlayerStats {
+  /** Multiplayer matches, and how they went. */
   matches: number;
   wins: number;
   losses: number;
   ties: number;
-  /** The best and the summed score of the player's own alliance. */
+  /** Multiplayer: the best and the summed score of the player's own alliance. */
   bestScore: number;
   totalScore: number;
-  /** Matches played with each robot, by the robot's name. */
+  /** Multiplayer: the points the player's own robot scored, summed, and how many matches recorded them. */
+  soloTotal: number;
+  soloMatches: number;
+  /** Timed singleplayer matches finished, and the best score in one. */
+  singleMatches: number;
+  singleBest: number;
+  /** Matches driven with each robot, of either kind, by the robot's name. */
   robots: Record<string, number>;
 }
 
-export const EMPTY_STATS: PlayerStats = { matches: 0, wins: 0, losses: 0, ties: 0, bestScore: 0, totalScore: 0, robots: {} };
+export const EMPTY_STATS: PlayerStats = {
+  matches: 0,
+  wins: 0,
+  losses: 0,
+  ties: 0,
+  bestScore: 0,
+  totalScore: 0,
+  soloTotal: 0,
+  soloMatches: 0,
+  singleMatches: 0,
+  singleBest: 0,
+  robots: {},
+};
 
 const count = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0);
 
@@ -28,15 +47,11 @@ export function loadStats(): PlayerStats {
     for (const [name, played] of Object.entries((saved.robots ?? {}) as Record<string, unknown>)) {
       if (count(played) > 0) robots[name] = count(played);
     }
-    return {
-      matches: count(saved.matches),
-      wins: count(saved.wins),
-      losses: count(saved.losses),
-      ties: count(saved.ties),
-      bestScore: count(saved.bestScore),
-      totalScore: count(saved.totalScore),
-      robots,
-    };
+    const stats: PlayerStats = { ...EMPTY_STATS, robots };
+    for (const key of Object.keys(EMPTY_STATS) as (keyof PlayerStats)[]) {
+      if (key !== 'robots') stats[key] = count(saved[key]);
+    }
+    return stats;
   } catch {
     return { ...EMPTY_STATS, robots: {} };
   }
@@ -47,20 +62,31 @@ export interface FinishedMatch {
   blue: number;
   red: number;
   robot: string;
+  /** True for a timed singleplayer match, which has no winner. */
+  single: boolean;
+  /** Multiplayer: the points the player's own robot scored, or null where that was not recorded. */
+  solo: number | null;
 }
 
 /** A record with one more finished match added. */
 export function withMatch(stats: PlayerStats, match: FinishedMatch): PlayerStats {
   const mine = match[match.alliance];
   const theirs = match[match.alliance === 'blue' ? 'red' : 'blue'];
+  const robots = { ...stats.robots, [match.robot]: (stats.robots[match.robot] ?? 0) + 1 };
+  if (match.single) {
+    return { ...stats, robots, singleMatches: stats.singleMatches + 1, singleBest: Math.max(stats.singleBest, mine) };
+  }
   return {
+    ...stats,
+    robots,
     matches: stats.matches + 1,
     wins: stats.wins + (mine > theirs ? 1 : 0),
     losses: stats.losses + (mine < theirs ? 1 : 0),
     ties: stats.ties + (mine === theirs ? 1 : 0),
     bestScore: Math.max(stats.bestScore, mine),
     totalScore: stats.totalScore + mine,
-    robots: { ...stats.robots, [match.robot]: (stats.robots[match.robot] ?? 0) + 1 },
+    soloTotal: stats.soloTotal + (match.solo ?? 0),
+    soloMatches: stats.soloMatches + (match.solo === null ? 0 : 1),
   };
 }
 
@@ -72,8 +98,14 @@ export function recordMatch(match: FinishedMatch): void {
   }
 }
 
+/** The robots driven most, most first, with how many matches each. */
+export function topRobots(stats: PlayerStats, most = 5): [string, number][] {
+  return Object.entries(stats.robots)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, most);
+}
+
 /** The robot played most, or null before the first match. */
 export function favouriteRobot(stats: PlayerStats): string | null {
-  const [best] = Object.entries(stats.robots).sort((a, b) => b[1] - a[1]);
-  return best ? best[0] : null;
+  return topRobots(stats, 1)[0]?.[0] ?? null;
 }

@@ -1,4 +1,5 @@
 import { multiplayer } from '../net/room';
+import { PlayerList } from './PlayerList';
 import { useGame } from './store';
 
 /** Final score, the breakdown by category, and bonus progress. */
@@ -51,6 +52,7 @@ export function Results({ onRestart }: { onRestart: () => void }) {
           ))}
         </ul>
 
+        {room && <PlayerList />}
         {room?.role === 'guest' ? (
           <p className="hint">The host can start another match.</p>
         ) : (

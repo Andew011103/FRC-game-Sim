@@ -26,6 +26,8 @@ export class Match {
   readonly points: Record<Alliance, Record<string, number>> = { blue: {}, red: {} };
   /** Things counted but not directly worth points (for example fuel scored). */
   readonly counts: Record<Alliance, Record<string, number>> = { blue: {}, red: {} };
+  /** Points each robot scored itself, by its place in the world's robot list. */
+  readonly solo: number[] = [];
 
   constructor(
     phases: Phase[],
@@ -59,6 +61,11 @@ export class Match {
 
   addPoints(alliance: Alliance, category: string, points: number): void {
     this.points[alliance][category] = (this.points[alliance][category] ?? 0) + points;
+  }
+
+  /** Credits a robot with points it scored itself. The alliance's points are added separately. */
+  addSolo(robotIndex: number, points: number): void {
+    this.solo[robotIndex] = (this.solo[robotIndex] ?? 0) + points;
   }
 
   count(alliance: Alliance, key: string, amount = 1): void {

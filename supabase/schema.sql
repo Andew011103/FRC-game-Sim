@@ -42,3 +42,13 @@ drop policy if exists "players read their own matches" on public.match_results;
 create policy "players read their own matches" on public.match_results for select to authenticated using (user_id = auth.uid());
 drop policy if exists "players add their own matches" on public.match_results;
 create policy "players add their own matches" on public.match_results for insert to authenticated with check (user_id = auth.uid());
+
+-- Added with the player record screen. Singleplayer matches are recorded too,
+-- and multiplayer matches record the points the player's own robot scored.
+alter table public.match_results add column if not exists kind text not null default 'multi' check (kind in ('multi', 'single'));
+alter table public.match_results add column if not exists solo_score integer check (solo_score between 0 and 100000);
+
+-- Records are public, so any player's record card can be shown. Adding a match is still only for its own player.
+drop policy if exists "players read their own matches" on public.match_results;
+drop policy if exists "match records are public" on public.match_results;
+create policy "match records are public" on public.match_results for select using (true);

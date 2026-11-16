@@ -23,6 +23,10 @@ import {
 } from './protocol';
 import { SnapshotReader, SnapshotWriter, applyMatchState, matchState, type RobotExtras } from './snapshot';
 
+/** An account id is only ever used to look a record up, but it is still checked to be one. */
+const cleanAccount = (id: unknown): string | undefined =>
+  typeof id === 'string' && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) ? id : undefined;
+
 const cleanName = (name: unknown): string =>
   (typeof name === 'string' ? name.trim().slice(0, 20) : '') || 'Player';
 
@@ -47,9 +51,10 @@ export class HostSession {
   private readonly writer = new SnapshotWriter();
   private nextId = 1;
   private tick = 0;
+  private finishedSent = false;
 
-  constructor(name: string, robot: RobotDefinition) {
-    this.players = [{ id: 0, name: cleanName(name), robot, alliance: 'blue' }];
+  constructor(name: string, robot: RobotDefinition, accountId?: string) {
+    this.players = [{ id: 0, name: cleanName(name), robot, alliance: 'blue', accountId: cleanAccount(accountId) }];
   }
 
   /** Takes a new connection. The player is in once their request to join arrives. */
@@ -94,7 +99,13 @@ export class HostSession {
 
     const count = (alliance: Alliance) => this.players.filter((player) => player.alliance === alliance).length;
     const alliance: Alliance = count('red') < count('blue') && count('red') < MAX_PER_ALLIANCE ? 'red' : 'blue';
-    peer.player = { id: this.nextId++, name: cleanName(message.name), robot, alliance };
+    peer.player = {
+      id: this.nextId++,
+      name: cleanName(message.name),
+      robot,
+      alliance,
+      accountId: cleanAccount(message.account),
+    };
     this.players.push(peer.player);
     this.send(peer, { type: 'welcome', id: peer.player.id });
     this.lobbyChanged();
@@ -123,6 +134,7 @@ export class HostSession {
     const setup: MatchSetup = { gameId, options, mode, seed, players: [...this.players] };
     this.sim = buildNetWorld(setup);
     this.tick = 0;
+    this.finishedSent = false;
     this.writer.requestFull();
     this.broadcast({ type: 'start', setup });
     return this.sim;
@@ -146,9 +158,12 @@ export class HostSession {
       const snapshot = this.writer.write(sim, this.tick);
       for (const peer of this.peers) if (peer.player) peer.transport.send(snapshot);
     }
-    if (this.tick % MATCH_STATE_EVERY === 0 || sim.match?.finished) {
+    // The final state is sent once, as soon as the match is over.
+    const justFinished = sim.match?.finished === true && !this.finishedSent;
+    if (this.tick % MATCH_STATE_EVERY === 0 || justFinished) {
       const state = matchState(sim);
       if (state) this.broadcast({ type: 'match', state });
+      if (justFinished) this.finishedSent = true;
     }
   }
 
@@ -195,13 +210,14 @@ export class ClientSession {
     robot: RobotDefinition,
     /** The time in seconds, for blending between snapshots. */
     private readonly now: () => number = () => performance.now() / 1000,
+    accountId?: string,
   ) {
     transport.onMessage = (data) => this.receive(data);
     transport.onClose = () => {
       this.closed = true;
       this.onClose?.();
     };
-    const join: ClientMessage = { type: 'join', protocol: PROTOCOL, name, robot };
+    const join: ClientMessage = { type: 'join', protocol: PROTOCOL, name, robot, account: accountId };
     transport.send(JSON.stringify(join));
   }
 

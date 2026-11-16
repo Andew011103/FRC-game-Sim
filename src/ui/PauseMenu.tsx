@@ -1,4 +1,5 @@
 import { multiplayer } from '../net/room';
+import { PlayerList } from './PlayerList';
 import { useGame } from './store';
 
 export function PauseMenu({ onRestart }: { onRestart: () => void }) {
@@ -11,6 +12,7 @@ export function PauseMenu({ onRestart }: { onRestart: () => void }) {
       <div className="panel pause-panel">
         <h1>{room ? 'Menu' : 'Paused'}</h1>
         {room && <p className="hint">The match carries on while this is open.</p>}
+        {room && <PlayerList />}
         <button className="primary" onClick={() => setScreen('playing')}>
           Resume
         </button>

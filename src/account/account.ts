@@ -50,22 +50,45 @@ async function showUser(user: User | null): Promise<void> {
   }
   state.setAccount({ id: user.id, email: user.email ?? '', name });
   state.updateSettings({ displayName: name });
-  state.setRecord(await fetchRecord(user.id));
+  state.setRecord((await fetchRecord(user.id)) ?? EMPTY_STATS);
 }
 
-async function fetchRecord(userId: string): Promise<PlayerStats> {
-  if (!supabase) return EMPTY_STATS;
-  const { data, error } = await supabase
-    .from('match_results')
-    .select('robot, own_score, other_score')
-    .eq('user_id', userId)
-    .order('played_at', { ascending: false })
-    .limit(1000);
-  if (error || !data) return EMPTY_STATS;
-  return data.reduce(
-    (stats, row) => withMatch(stats, { alliance: 'blue', blue: row.own_score, red: row.other_score, robot: row.robot }),
+async function fetchRecord(userId: string): Promise<PlayerStats | null> {
+  if (!supabase) return null;
+  const rows = (columns: string) =>
+    supabase
+      .from('match_results')
+      .select(columns)
+      .eq('user_id', userId)
+      .order('played_at', { ascending: false })
+      .limit(1000);
+  let { data, error } = await rows('robot, own_score, other_score, kind, solo_score');
+  // A database set up before singleplayer and solo scores were recorded has only the older columns.
+  if (error) ({ data, error } = await rows('robot, own_score, other_score'));
+  if (error || !data) return null;
+  return (data as unknown as Record<string, unknown>[]).reduce<PlayerStats>(
+    (stats, row) =>
+      withMatch(stats, {
+        alliance: 'blue',
+        blue: Number(row.own_score) || 0,
+        red: Number(row.other_score) || 0,
+        robot: String(row.robot),
+        single: row.kind === 'single',
+        solo: typeof row.solo_score === 'number' ? row.solo_score : null,
+      }),
     EMPTY_STATS,
   );
+}
+
+/** Another player's name and record, or null if they cannot be read. */
+export async function fetchPlayer(accountId: string): Promise<{ name: string; stats: PlayerStats } | null> {
+  if (!supabase) return null;
+  const [profile, stats] = await Promise.all([
+    supabase.from('profiles').select('display_name').eq('id', accountId).maybeSingle(),
+    fetchRecord(accountId),
+  ]);
+  const name = profile.data?.display_name as string | undefined;
+  return name && stats ? { name, stats } : null;
 }
 
 /** Signs in. Returns what went wrong, or null. */
@@ -117,10 +140,13 @@ export async function saveMatch(match: SavedMatch): Promise<void> {
     own_score: own,
     other_score: other,
     players: match.players,
+    kind: match.single ? 'single' : 'multi',
+    solo_score: match.solo,
   });
   if (error) {
     // Better kept in the browser than lost.
     recordMatch(match);
+    console.warn('Saving the match failed:', error.message);
     state.setAccountNote('That match could not be saved to your account, so it was kept in this browser.');
     return;
   }

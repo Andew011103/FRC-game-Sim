@@ -1717,6 +1717,8 @@ option {
 .field input[type='text'],
 .field input[type='email'],
 .field input[type='password'] {
+  /* The label takes the first column; the box takes the rest of the row. */
+  grid-column: 2 / -1;
   min-width: 0;
   padding: 9px 12px;
   font: inherit;
@@ -1724,4 +1726,81 @@ option {
   background: var(--raised);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+/* The player record screen, and names that open it. */
+
+.player-link {
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-bottom: 1px dotted var(--muted);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.player-link:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.record-name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.robot-ranks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+.robot-ranks li > span:last-child {
+  float: right;
+}
+
+.coming-soon {
+  opacity: 0.45;
+  filter: grayscale(1);
+  user-select: none;
+}
+
+.coming-soon-text {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.player-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: left;
+}
+
+.player-list ul {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  background: var(--raised);
+  border-radius: 8px;
+  border-top: 3px solid #3b82f6;
+}
+
+.player-list ul.red {
+  border-top-color: #ef4444;
+}
+
+.player-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
 }

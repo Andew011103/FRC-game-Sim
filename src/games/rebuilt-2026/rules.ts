@@ -221,6 +221,8 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
       if (e * pieces.cur[k] < HALF_LENGTH - OUTPOST_DEPTH) continue;
       if (pieces.cur[k + 1] > OUTPOST.height || Math.abs(pieces.cur[k + 2] - z) > OUTPOST.width / 2) continue;
       pieces.hold(i, OFF_FIELD);
+      // What the human player throws in is nobody's own score.
+      pieces.lastRobot[i] = -1;
       player.fuel.push(i);
     }
 
@@ -279,7 +281,12 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
         const leaving = inHub.filter((entry) => entry.goal === goal && entry.wait <= 0);
         const scored = leaving.length;
         if (scored === 0) continue;
+        const active = activeIn(phase.id, goal.alliance);
         for (const { piece } of leaving) {
+          // A point goes to the robot that shot the fuel, if it shot at its own hub.
+          const shooter = sim.robots[sim.pieces.lastRobot[piece]];
+          if (active && shooter?.alliance === goal.alliance) match.addSolo(shooter.index, 1);
+          sim.pieces.lastRobot[piece] = -1;
           expelGoalPiece(sim, goal, piece);
           released.push(piece);
         }
@@ -313,13 +320,17 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
           if (robot.climbLevel() >= 1 && climbed[robot.alliance] < AUTO_TOWER_ROBOTS) {
             climbed[robot.alliance]++;
             match.addPoints(robot.alliance, 'Auto tower', AUTO_TOWER_POINTS);
+            match.addSolo(robot.index, AUTO_TOWER_POINTS);
           }
         }
       }
       if (match.finished) {
         for (const robot of sim.robots) {
           const points = TELEOP_TOWER_POINTS[robot.climbLevel()] ?? 0;
-          if (points > 0) match.addPoints(robot.alliance, 'Teleop tower', points);
+          if (points > 0) {
+            match.addPoints(robot.alliance, 'Teleop tower', points);
+            match.addSolo(robot.index, points);
+          }
         }
       }
     },

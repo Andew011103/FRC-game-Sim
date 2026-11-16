@@ -187,15 +187,18 @@ export class Game {
     return this.sim.rules?.status(this.sim, alliance) ?? null;
   }
 
-  /** Shows the results, and adds a finished multiplayer match to the player's record. */
+  /** Shows the results, and adds the finished match to the player's record. */
   private finish(online: boolean, bonuses?: Bonus[]): void {
     const results = this.results(bonuses);
-    if (online && this.player) {
+    // Multiplayer matches and timed singleplayer matches go on the player's record; free practice does not.
+    if (this.player && this.sim.match?.mode === 'match') {
       void saveMatch({
         alliance: this.player.alliance,
         blue: results.blue,
         red: results.red,
         robot: this.player.def.name,
+        single: !online,
+        solo: online ? (this.sim.match.solo[this.player.index] ?? 0) : null,
         game: this.sim.game.id,
         official: this.player.def.official === true,
         players: this.sim.robots.length,
@@ -233,7 +236,7 @@ export class Game {
     const host = this.hosting();
     const client = this.joined();
     // A multiplayer match carries on behind the menu and the results.
-    const inMatch = screen === 'playing' || screen === 'paused' || screen === 'results';
+    const inMatch = screen === 'playing' || screen === 'paused' || screen === 'results' || screen === 'record';
     const driving = screen === 'playing' ? driverInput : NEUTRAL_INPUT;
     if (client) {
       // The host runs the match. This player only sends what their driver is asking for.

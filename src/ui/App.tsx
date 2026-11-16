@@ -8,6 +8,7 @@ import { Home } from './Home';
 import { Hud } from './Hud';
 import { Multiplayer } from './Multiplayer';
 import { PauseMenu } from './PauseMenu';
+import { Record } from './Record';
 import { Results } from './Results';
 import { RobotSelect } from './RobotSelect';
 import { Rules } from './Rules';
@@ -73,6 +74,7 @@ export function App() {
       {screen === 'home' && <Home />}
       {screen === 'singleplayer' && <Singleplayer onStart={start} onWindows={windows} />}
       {screen === 'multiplayer' && <Multiplayer />}
+      {screen === 'record' && <Record />}
       {screen === 'robots' && <RobotSelect onWindows={windows} />}
       {screen === 'rules' && <Rules />}
       {screen === 'settings' && <SettingsScreen />}

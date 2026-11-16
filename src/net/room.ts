@@ -15,8 +15,8 @@ class Multiplayer {
   private link: Link | null = null;
 
   private me() {
-    const { settings, robotId, customRobots } = useGame.getState();
-    return { name: settings.displayName, robot: findRobot(robotId, customRobots) };
+    const { settings, robotId, customRobots, account } = useGame.getState();
+    return { name: settings.displayName, robot: findRobot(robotId, customRobots), accountId: account?.id };
   }
 
   private showLobby(players: PlayerInfo[], myId: number, playing: boolean): void {
@@ -26,7 +26,7 @@ class Multiplayer {
       code: this.link.code,
       myId,
       playing,
-      players: players.map(({ id, name, robot, alliance }) => ({ id, name, robot: robot.name, alliance })),
+      players: players.map(({ id, name, robot, alliance, accountId }) => ({ id, name, robot: robot.name, alliance, accountId })),
     });
   }
 
@@ -36,8 +36,8 @@ class Multiplayer {
     if (state.roomBusy || this.link) return;
     state.setRoomBusy(true);
     try {
-      const { name, robot } = this.me();
-      const host = new HostSession(name, robot);
+      const { name, robot, accountId } = this.me();
+      const host = new HostSession(name, robot, accountId);
       this.link = await openRoom((transport) => host.accept(transport));
       this.host = host;
       host.onLobby = (players) => this.showLobby(players, 0, host.sim !== null);
@@ -53,10 +53,10 @@ class Multiplayer {
     if (state.roomBusy || this.link) return;
     state.setRoomBusy(true);
     try {
-      const { name, robot } = this.me();
+      const { name, robot, accountId } = this.me();
       const { transport, link } = await joinRoom(code);
       this.link = link;
-      const client = new ClientSession(transport, name, robot);
+      const client = new ClientSession(transport, name, robot, undefined, accountId);
       this.client = client;
       client.onLobby = (players) => this.showLobby(players, client.id ?? -1, client.sim !== null);
       client.onStart = (sim) => {

@@ -4,6 +4,7 @@ import { useGame, type Screen } from './store';
 const ENTRIES: { label: string; screen: Screen | null; note?: string }[] = [
   { label: 'Singleplayer', screen: 'singleplayer' },
   { label: 'Multiplayer', screen: 'multiplayer' },
+  { label: 'Player record', screen: 'record' },
   { label: 'Leaderboard', screen: null, note: 'Coming later' },
   { label: 'Update logs', screen: 'updates' },
   { label: 'Change game', screen: null, note: 'Coming later' },
@@ -13,6 +14,7 @@ const ENTRIES: { label: string; screen: Screen | null; note?: string }[] = [
 /** The first screen: a list of places to go, over the turning field. */
 export function Home() {
   const setScreen = useGame((state) => state.setScreen);
+  const showRecord = useGame((state) => state.showRecord);
   const ready = useGame((state) => state.ready);
 
   return (
@@ -25,7 +27,7 @@ export function Home() {
             key={entry.label}
             className="home-button"
             disabled={entry.screen === null || !ready}
-            onClick={() => entry.screen && setScreen(entry.screen)}
+            onClick={() => (entry.screen === 'record' ? showRecord(null) : entry.screen && setScreen(entry.screen))}
           >
             <span>{entry.label}</span>
             {entry.note && <span className="note">{entry.note}</span>}

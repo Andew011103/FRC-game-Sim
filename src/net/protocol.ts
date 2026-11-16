@@ -12,7 +12,7 @@ import type { MatchState } from './snapshot';
 // (a driver's input and a snapshot of the field) are binary.
 
 /** Raised whenever the messages change, so mismatched versions refuse each other. */
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 export const MAX_PLAYERS = 6;
 export const MAX_PER_ALLIANCE = 3;
 /** The host sends the field after every this many simulation steps: 30 times a second. */
@@ -33,6 +33,8 @@ export interface PlayerInfo {
   name: string;
   robot: RobotDefinition;
   alliance: Alliance;
+  /** The player's account, if they are signed in, so others can look up their record. */
+  accountId?: string;
 }
 
 /** Everything needed to build the same field on every player's computer. Robots are in `players` order. */
@@ -45,7 +47,7 @@ export interface MatchSetup {
 }
 
 export type ClientMessage =
-  | { type: 'join'; protocol: number; name: string; robot: unknown }
+  | { type: 'join'; protocol: number; name: string; robot: unknown; account?: unknown }
   | { type: 'alliance'; alliance: Alliance };
 
 /** A driver's choices that change how the host drives their robot. */

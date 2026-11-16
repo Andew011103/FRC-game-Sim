@@ -3,6 +3,14 @@ import { useGame } from './store';
 /** What changed in each update, newest first. Add a new entry at the top. */
 const UPDATES: { title: string; changes: string[] }[] = [
   {
+    title: 'Player records',
+    changes: [
+      'A record screen for every player: matches, wins and losses, favourite robots and scores.',
+      'Each robot now has its own score in multiplayer, and timed singleplayer matches are recorded.',
+      'In a multiplayer room, a signed-in player’s name opens their record.',
+    ],
+  },
+  {
     title: 'Multiplayer, first version',
     changes: [
       'Host a match and share its room code, or join one with a code. Up to three robots a side.',

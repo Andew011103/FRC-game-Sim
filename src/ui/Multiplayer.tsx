@@ -5,7 +5,7 @@ import { CODE_LENGTH, cleanCode } from '../net/peer';
 import { MAX_PER_ALLIANCE } from '../net/protocol';
 import { multiplayer } from '../net/room';
 import { findRobot } from '../robots';
-import { favouriteRobot } from '../stats';
+import { PlayerName } from './Record';
 import { useGame } from './store';
 
 const ALLIANCES: { id: Alliance; name: string }[] = [
@@ -113,7 +113,7 @@ function Account() {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const favourite = favouriteRobot(stats);
+  const showRecord = useGame((state) => state.showRecord);
 
   const submit = async (action: 'in' | 'up') => {
     setBusy(true);
@@ -133,26 +133,17 @@ function Account() {
             <span className="field-value">{account.email}</span>
           </div>
         )}
-        {stats.matches === 0 ? (
-          <p className="hint">Finish a multiplayer match to start your record.</p>
-        ) : (
-          <dl className="record">
-            <dt>Matches</dt>
-            <dd>{stats.matches}</dd>
-            <dt>Won, lost, tied</dt>
-            <dd>
-              {stats.wins}, {stats.losses}, {stats.ties}
-            </dd>
-            <dt>Win rate</dt>
-            <dd>{Math.round((100 * stats.wins) / stats.matches)}%</dd>
-            <dt>Most played robot</dt>
-            <dd>{favourite}</dd>
-            <dt>Best alliance score</dt>
-            <dd>{stats.bestScore}</dd>
-            <dt>Average alliance score</dt>
-            <dd>{Math.round(stats.totalScore / stats.matches)}</dd>
-          </dl>
-        )}
+        <dl className="record">
+          <dt>Matches played</dt>
+          <dd>{stats.matches}</dd>
+          <dt>Record (W-L-T)</dt>
+          <dd>
+            {stats.wins}-{stats.losses}-{stats.ties}
+          </dd>
+        </dl>
+        <button className="secondary" onClick={() => showRecord(null)}>
+          View your record
+        </button>
         {note && <p className="hint lobby-error">{note}</p>}
         {account ? (
           <button className="secondary" onClick={() => void signOut()}>
@@ -217,7 +208,7 @@ function Room() {
               {players.map((player) => (
                 <div className="lobby-player" key={player.id}>
                   <span>
-                    {player.name}
+                    <PlayerName player={player} />
                     {player.id === room.myId && <span className="muted"> (you)</span>}
                     {player.id === 0 && <span className="muted"> (host)</span>}
                   </span>
