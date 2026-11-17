@@ -40,7 +40,7 @@
       "sizeY": 0.18,
       "color": "#5c5c5c",
       "rate": 19.8,
-      "reach": 0.06,
+      "reach": 0.1,
       "outtake": false,
       "outtakeDirection": "front",
       "outtakeSpeed": 4

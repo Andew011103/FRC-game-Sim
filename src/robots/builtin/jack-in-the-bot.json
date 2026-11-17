@@ -33,14 +33,14 @@
     {
       "type": "intake",
       "x": 0,
-      "z": 0.34,
+      "z": 0,
       "bottom": 0.03,
       "sizeX": 0.6,
-      "sizeZ": 0.27,
+      "sizeZ": 0.95,
       "sizeY": 0.18,
       "color": "#454545",
       "rate": 21.4,
-      "reach": 0.06,
+      "reach": 0.1,
       "outtake": false,
       "outtakeDirection": "away",
       "outtakeSpeed": 3
@@ -90,21 +90,6 @@
       "slowInAuto": false,
       "autoRate": 3,
       "tiltCorrection": false
-    },
-    {
-      "type": "intake",
-      "x": 0,
-      "z": -0.34,
-      "bottom": 0.03,
-      "sizeX": 0.6,
-      "sizeZ": 0.27,
-      "sizeY": 0.18,
-      "color": "#454545",
-      "rate": 21.4,
-      "reach": 0.06,
-      "outtake": false,
-      "outtakeDirection": "away",
-      "outtakeSpeed": 3
     }
   ]
 }
