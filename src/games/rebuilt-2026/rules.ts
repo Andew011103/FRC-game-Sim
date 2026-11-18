@@ -35,7 +35,7 @@ import { HALF_LENGTH, HUB_HEIGHT, OUTPOST, end, hubX } from './field';
 const GRACE_SECONDS = 3;
 
 export const PHASES: Phase[] = [
-  { id: 'auto', label: 'Auto', duration: 20 },
+  { id: 'auto', label: 'Auto', duration: 20, pauseAfter: 3 },
   { id: 'transition', label: 'Transition', duration: 10 },
   { id: 'shift1', label: 'Shift 1', duration: 25 },
   { id: 'shift2', label: 'Shift 2', duration: 25 },
@@ -70,6 +70,11 @@ export interface HumanPlayer {
 const THROW = { height: 1.5, pitch: (62 * Math.PI) / 180, missAim: [0.07, 0.16], missSpeed: [0.06, 0.14] };
 /** Fuel this close to the alliance wall, in front of the outpost opening, has been pushed in. */
 const OUTPOST_DEPTH = 0.16;
+/** How fast an outpost takes in fuel pushed into it. */
+const OUTPOST_INTAKE_PER_SECOND = 5;
+/** Where an outpost's own fuel is laid out before the match, so it can be put inside instead. */
+const OUTPOST_START_DEPTH = 1.2;
+const OUTPOST_START_HALF_WIDTH = 0.5;
 const ALLIANCES: Alliance[] = ['blue', 'red'];
 
 /** The period a piece scoring right now belongs to, allowing for the grace time after each period. */
@@ -178,9 +183,9 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
   /** The alliance whose hub goes dark in shifts 1 and 3. Decided once auto's last shots are counted. */
   let firstInactive: Alliance | null = null;
   /** Fuel each human player is holding, and the time until their next throw. */
-  const humanPlayer: Record<Alliance, { fuel: number[]; wait: number }> = {
-    blue: { fuel: [], wait: 0 },
-    red: { fuel: [], wait: 0 },
+  const humanPlayer: Record<Alliance, { fuel: number[]; wait: number; intakeWait: number }> = {
+    blue: { fuel: [], wait: 0, intakeWait: 0 },
+    red: { fuel: [], wait: 0, intakeWait: 0 },
   };
 
   /** Fuel inside each hub, on its way through. */
@@ -208,6 +213,14 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
     return 'on';
   };
 
+  /** Puts a piece in an alliance's outpost, for its human player to throw. */
+  const store = (sim: SimWorld, alliance: Alliance, piece: number): void => {
+    sim.pieces.hold(piece, OFF_FIELD);
+    // What the human player throws in is nobody's own score.
+    sim.pieces.lastRobot[piece] = -1;
+    humanPlayer[alliance].fuel.push(piece);
+  };
+
   /** Takes in fuel pushed into an outpost and has its human player throw it at the hub. */
   const runOutpost = (sim: SimWorld, alliance: Alliance, skill: HumanPlayer): void => {
     const { pieces } = sim;
@@ -215,15 +228,21 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
     const z = -e * OUTPOST.z;
     const player = humanPlayer[alliance];
 
+    // The outpost takes fuel in one piece at a time. The rest waits, still, in the opening for its turn.
+    player.intakeWait = Math.max(0, player.intakeWait - SIM_DT);
     for (let i = 0; i < pieces.count; i++) {
       if (pieces.heldBy[i] !== -1) continue;
       const k = i * 3;
       if (e * pieces.cur[k] < HALF_LENGTH - OUTPOST_DEPTH) continue;
       if (pieces.cur[k + 1] > OUTPOST.height || Math.abs(pieces.cur[k + 2] - z) > OUTPOST.width / 2) continue;
-      pieces.hold(i, OFF_FIELD);
-      // What the human player throws in is nobody's own score.
-      pieces.lastRobot[i] = -1;
-      player.fuel.push(i);
+      if (player.intakeWait <= 0) {
+        store(sim, alliance, i);
+        player.intakeWait = 1 / OUTPOST_INTAKE_PER_SECOND;
+      } else {
+        const body = pieces.bodies[i];
+        body.setLinvel(v3(), true);
+        body.setAngvel(v3(), true);
+      }
     }
 
     player.wait = Math.max(0, player.wait - SIM_DT);
@@ -255,6 +274,22 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
 
   return {
     phases: PHASES,
+
+    init(sim) {
+      // Each outpost starts the match with its fuel already inside, ready for the human player.
+      if (!setup.humanPlayer) return;
+      const { pieces } = sim;
+      for (const alliance of ALLIANCES) {
+        const e = end(alliance);
+        for (let i = 0; i < pieces.count; i++) {
+          if (pieces.heldBy[i] !== -1) continue;
+          const at = pieces.position(i);
+          if (e * at.x >= HALF_LENGTH - OUTPOST_START_DEPTH && Math.abs(at.z + e * OUTPOST.z) <= OUTPOST_START_HALF_WIDTH) {
+            store(sim, alliance, i);
+          }
+        }
+      }
+    },
 
     step(sim) {
       const match = sim.match!;

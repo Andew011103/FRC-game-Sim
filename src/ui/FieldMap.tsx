@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { fitStart } from '../games/start';
-import type { Alliance, Area, BoxElement, GameDefinition } from '../games/types';
+import { robotStart } from '../games/start';
+import type { Alliance, BoxElement, GameDefinition } from '../games/types';
 import { outlineOf } from '../robots/chassis';
 import { fitsUnder } from '../robots/stats';
 import type { RobotDefinition } from '../robots/types';
@@ -14,7 +14,30 @@ interface Props {
   /** Null means the game's usual starting spot. */
   value: StartPose | null;
   onChange: (pose: StartPose | null) => void;
+  /** Which driver station the robot belongs to; its usual spot lines up with it. */
+  station?: number;
+  /** Other robots on the field, drawn faintly. */
+  others?: { key: string | number; robot: RobotDefinition; alliance: Alliance; pose: StartPose; label: string }[];
+  /** False to only show where the robot is. */
+  editable?: boolean;
 }
+
+/** A robot's outline turned and placed, as SVG polygon points for its body and its front arrow. */
+function outlinePoints(robot: RobotDefinition, pose: StartPose, sx: (x: number) => number, sy: (z: number) => number) {
+  const outline = outlineOf(robot.chassis);
+  const halfX = (outline.front + outline.back) / 2;
+  const halfZ = (outline.left + outline.right) / 2;
+  const cos = Math.cos(pose.yaw);
+  const sin = Math.sin(pose.yaw);
+  const point = (lx: number, lz: number) => `${sx(pose.x + lx * cos + lz * sin)},${sy(pose.z - lx * sin + lz * cos)}`;
+  return {
+    body: [point(halfX, -halfZ), point(halfX, halfZ), point(-halfX, halfZ), point(-halfX, -halfZ)].join(' '),
+    arrow: [point(halfX + 0.28, 0), point(halfX + 0.02, -0.16), point(halfX + 0.02, 0.16)].join(' '),
+  };
+}
+
+/** How far each button press turns the robot. */
+const TURN_STEP = Math.PI / 4;
 
 /** Radians per second the robot turns while a turn key is held. */
 const TURN_RATE = 2.2;
@@ -25,21 +48,13 @@ const TURN_RATE = 2.2;
  * hold the turn keys to turn it. It can go anywhere in its alliance zone,
  * and under the trench bars if the robot fits under them.
  */
-export function FieldMap({ game, robot, alliance, value, onChange }: Props) {
+export function FieldMap({ game, robot, alliance, value, onChange, station = 1, others = [], editable = true }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const dragging = useRef(false);
   const keys = useGame((state) => state.settings.keys);
   const { length, width } = game.field;
-  const usual = game.spawns.find((spawn) => spawn.alliance === alliance) ?? game.spawns[0];
-  const pose: StartPose = value ?? { x: usual.x, z: usual.z, yaw: usual.yaw };
-
-  const outline = outlineOf(robot.chassis);
-  const halfX = (outline.front + outline.back) / 2;
-  const halfZ = (outline.left + outline.right) / 2;
+  const pose: StartPose = robotStart(game, robot, alliance, value, station);
   const underBars = fitsUnder(robot, game.field.lowBarClearance ?? 0);
-  const areas: Area[] = game.startAreas?.(alliance, underBars) ?? [
-    { minX: -length / 2, maxX: length / 2, minZ: -width / 2, maxZ: width / 2 },
-  ];
 
   // Screen position of a field point: the picture is the field turned half a turn, so red is on the left.
   const sx = (x: number) => length / 2 - x;
@@ -47,9 +62,8 @@ export function FieldMap({ game, robot, alliance, value, onChange }: Props) {
 
   const startZone = game.startZone?.(alliance) ?? null;
 
-  /** The nearest allowed spot to a point: on floor it may stand on, and touching its alliance zone. */
-  const allowed = (x: number, z: number, yaw: number): StartPose =>
-    fitStart(areas, startZone, { x: halfX, z: halfZ }, { x, z, yaw }) ?? { x: pose.x, z: pose.z, yaw };
+  /** The nearest allowed spot to a point: on floor it may stand on, and touching its starting line. */
+  const allowed = (x: number, z: number, yaw: number): StartPose => robotStart(game, robot, alliance, { x, z, yaw });
 
   const moveTo = (clientX: number, clientY: number) => {
     const box = svg.current?.getBoundingClientRect();
@@ -60,8 +74,8 @@ export function FieldMap({ game, robot, alliance, value, onChange }: Props) {
   };
 
   // Holding a turn key turns the robot smoothly. The latest pose is read from a ref so the loop is set up once.
-  const latest = useRef({ pose, allowed, onChange });
-  latest.current = { pose, allowed, onChange };
+  const latest = useRef({ pose, allowed, onChange, editable });
+  latest.current = { pose, allowed, onChange, editable };
   useEffect(() => {
     const held = new Set<string>();
     let frame = 0;
@@ -77,6 +91,7 @@ export function FieldMap({ game, robot, alliance, value, onChange }: Props) {
       frame = held.size > 0 ? requestAnimationFrame(tick) : 0;
     };
     const down = (event: KeyboardEvent) => {
+      if (!latest.current.editable) return;
       if (event.code !== keys.turnLeft && event.code !== keys.turnRight) return;
       if (event.target instanceof HTMLInputElement) return;
       event.preventDefault();
@@ -96,12 +111,8 @@ export function FieldMap({ game, robot, alliance, value, onChange }: Props) {
     };
   }, [keys.turnLeft, keys.turnRight]);
 
-  // The robot's corners and the tip of its front arrow, in field coordinates.
-  const cos = Math.cos(pose.yaw);
-  const sin = Math.sin(pose.yaw);
-  const point = (lx: number, lz: number) => `${sx(pose.x + lx * cos + lz * sin)},${sy(pose.z - lx * sin + lz * cos)}`;
-  const body = [point(halfX, -halfZ), point(halfX, halfZ), point(-halfX, halfZ), point(-halfX, -halfZ)].join(' ');
-  const arrow = [point(halfX + 0.28, 0), point(halfX + 0.02, -0.16), point(halfX + 0.02, 0.16)].join(' ');
+  const { body, arrow } = outlinePoints(robot, pose, sx, sy);
+  const turn = (by: number) => onChange(allowed(pose.x, pose.z, Math.round((pose.yaw + by) / TURN_STEP) * TURN_STEP));
   const zone = game.field.zoneDepth ?? 0;
 
   return (
@@ -111,7 +122,9 @@ export function FieldMap({ game, robot, alliance, value, onChange }: Props) {
         viewBox={`0 0 ${length} ${width}`}
         role="img"
         aria-label="The field from above. Drag your robot to set where it starts."
+        className={editable ? '' : 'locked'}
         onPointerDown={(event) => {
+          if (!editable) return;
           dragging.current = true;
           event.currentTarget.setPointerCapture(event.pointerId);
           moveTo(event.clientX, event.clientY);
@@ -150,21 +163,45 @@ export function FieldMap({ game, robot, alliance, value, onChange }: Props) {
             />
           );
         })}
+        {others.map((other) => {
+          const shape = outlinePoints(other.robot, other.pose, sx, sy);
+          return (
+            <g key={other.key} className={`other-robot ${other.alliance}`}>
+              <polygon className="robot" points={shape.body} />
+              <polygon className="robot-front" points={shape.arrow} />
+              <text x={sx(other.pose.x)} y={sy(other.pose.z) + 0.12} textAnchor="middle">
+                {other.label}
+              </text>
+            </g>
+          );
+        })}
         <polygon className="robot" points={body} />
         <polygon className="robot-front" points={arrow} />
       </svg>
       <div className="field-map-foot">
         <span className="hint">
-          Drag to place your robot. Hold {keyLabel(keys.turnLeft)} or {keyLabel(keys.turnRight)} to turn it.
+          {editable
+            ? `Drag to place the robot. Hold ${keyLabel(keys.turnLeft)} or ${keyLabel(keys.turnRight)} to turn it, or use the buttons to turn it 45°.`
+            : 'Only the host, or this player, can move this robot.'}
           {startZone
             ? underBars
-              ? ' It must touch your alliance zone; it fits under the trench, so it may start there with a bumper on the line.'
-              : ' It must touch your alliance zone.'
+              ? ' Its bumpers or frame must touch the starting line; it fits under the trench, so it may also start there on the line.'
+              : ' Its bumpers or frame must touch the starting line.'
             : ''}
         </span>
-        <button className="small" disabled={value === null} onClick={() => onChange(null)}>
-          Reset
-        </button>
+        {editable && (
+          <div className="button-row">
+            <button className="small" aria-label="Turn 45 degrees left" onClick={() => turn(TURN_STEP)}>
+              ⟲ 45°
+            </button>
+            <button className="small" aria-label="Turn 45 degrees right" onClick={() => turn(-TURN_STEP)}>
+              ⟳ 45°
+            </button>
+            <button className="small" disabled={value === null} onClick={() => onChange(null)}>
+              Reset
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

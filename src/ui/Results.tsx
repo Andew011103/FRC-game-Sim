@@ -53,16 +53,26 @@ export function Results({ onRestart }: { onRestart: () => void }) {
         </ul>
 
         {room && <PlayerList />}
-        {room?.role === 'guest' ? (
-          <p className="hint">The host can start another match.</p>
+        {room ? (
+          <>
+            {/* Everyone goes back to the same room, with the same code, to pick robots and spots for the next match. */}
+            <button className="primary" onClick={() => setScreen('multiplayer')}>
+              Return to room
+            </button>
+            <button className="secondary" onClick={() => multiplayer.leave()}>
+              Leave the room
+            </button>
+          </>
         ) : (
-          <button className="primary" onClick={room ? () => multiplayer.start() : onRestart}>
-            Play again
-          </button>
+          <>
+            <button className="primary" onClick={onRestart}>
+              Play again
+            </button>
+            <button className="secondary" onClick={() => setScreen('singleplayer')}>
+              Back to singleplayer
+            </button>
+          </>
         )}
-        <button className="secondary" onClick={room ? () => multiplayer.leave() : () => setScreen('singleplayer')}>
-          {room ? (room.role === 'host' ? 'Close the room' : 'Leave the room') : 'Back to singleplayer'}
-        </button>
       </div>
     </div>
   );

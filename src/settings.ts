@@ -138,13 +138,18 @@ const STORAGE_KEY = 'drive-practice.settings';
 
 /** Reads saved settings, filling anything missing or of the wrong kind from the defaults. */
 export function loadSettings(): Settings {
-  let saved: Record<string, unknown> = {};
+  let saved: unknown = {};
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
-    if (parsed !== null && typeof parsed === 'object') saved = parsed as Record<string, unknown>;
+    saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
   } catch {
     // Storage can be blocked or hold something unreadable; use the defaults.
   }
+  return readSettings(saved);
+}
+
+/** Settings from untrusted data, such as storage or a player's account: anything missing or of the wrong kind is the default. */
+export function readSettings(raw: unknown): Settings {
+  const saved = (raw !== null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const defaults = DEFAULT_SETTINGS as unknown as Record<string, unknown>;
   const settings: Record<string, unknown> = {};
   for (const key of Object.keys(defaults)) {

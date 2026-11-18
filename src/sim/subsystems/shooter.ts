@@ -1,6 +1,7 @@
+import RAPIER from '@dimforge/rapier3d-compat';
 import { frameTop } from '../../robots/chassis';
 import type { SubsystemDef } from '../../robots/types';
-import { add, clamp, quatFromYaw, rotate, scale, v3, wrapAngle, type Vec3 } from '../math';
+import { add, clamp, dot, quatFromYaw, rotate, scale, sub, v3, wrapAngle, type Vec3 } from '../math';
 import {
   numberOr,
   resolveSettings,
@@ -44,6 +45,8 @@ const TURN_GAIN = 8;
 const FIRE_WINDOW = 3 * DEG;
 /** A piece leaves this far along the launch direction from the top of the box. */
 const RELEASE_OFFSET = 0.12;
+/** The share of its speed a shot keeps when it is blocked the moment it leaves. */
+const BLOCKED_BOUNCE = 0.2;
 /** A shooter that adjusts its launch angle never goes flatter than this. */
 const MIN_PITCH = 10 * DEG;
 
@@ -245,8 +248,34 @@ class Shooter implements Subsystem {
       const offset = (lane - (s.lanes - 1) / 2) * this.laneSpacing;
       const from = add(aim.muzzle, rotate(rot, v3(Math.sin(this.yaw) * offset, 0, Math.cos(this.yaw) * offset)));
       // The piece inherits the robot's own motion, so shooting on the move drifts.
-      const velocity = add(robot.pointVelocity(from), scale(dir, aim.speed));
-      sim.pieces.release(piece, add(from, scale(dir, RELEASE_OFFSET)), velocity);
+      const own = robot.pointVelocity(from);
+      const velocity = add(own, scale(dir, aim.speed));
+      const radius = sim.pieces.radii[piece];
+      // The piece appears a little way out from the shooter. Anything solid in that gap, such as
+      // another robot's shot blocker held right against the shooter, stops it there instead.
+      const hit = sim.world.castRayAndGetNormal(
+        new RAPIER.Ray(from, dir),
+        RELEASE_OFFSET + radius,
+        true,
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        undefined,
+        undefined,
+        robot.body,
+        (collider) => {
+          const body = collider.parent();
+          return !body || body.isFixed() || sim.robots.some((other) => other !== robot && other.body === body);
+        },
+      );
+      if (hit) {
+        // Knocked back off what it hit, with most of its speed lost.
+        const normal = v3(hit.normal.x, hit.normal.y, hit.normal.z);
+        const shot = scale(dir, aim.speed);
+        const bounced = sub(shot, scale(normal, 2 * dot(shot, normal)));
+        const at = add(from, scale(dir, Math.max(0, hit.timeOfImpact - radius)));
+        sim.pieces.release(piece, at, add(own, scale(bounced, BLOCKED_BOUNCE)));
+      } else {
+        sim.pieces.release(piece, add(from, scale(dir, RELEASE_OFFSET)), velocity);
+      }
       // Uneven gaps keep the lanes from falling back into step. The average rate is unchanged.
       this.cooldowns[lane] = (1 + (sim.random() - 0.5) * 2 * (s.timingJitter / 100)) / rate;
     }
@@ -285,7 +314,7 @@ export const shooterSpec: SubsystemSpec = {
     { key: 'pitch', label: 'Steepest launch angle', kind: 'number', default: 60, min: 10, max: 85, unit: '°' },
     { key: 'speed', label: 'Top launch speed', kind: 'number', default: 9, min: 1, max: 18, unit: 'm/s' },
     { key: 'lanes', label: 'Pieces wide', kind: 'number', default: 1, min: 1, max: 6, step: 1, unit: 'lanes' },
-    { key: 'rate', label: 'Fire rate, each lane', kind: 'number', default: 6, min: 0.5, max: 25, unit: 'pieces/s' },
+    { key: 'rate', label: 'Fire rate, each lane', kind: 'number', default: 6, min: 0.5, max: 32, unit: 'pieces/s' },
     { key: 'spread', label: 'Inaccuracy', kind: 'number', default: 1.5, min: 0, max: 15, unit: '°' },
     { key: 'timingJitter', label: 'Uneven shot timing', kind: 'number', default: 30, min: 0, max: 90, step: 1, unit: '%' },
     { key: 'moveAccuracy', label: 'Shoot on the Move', kind: 'number', default: 50, min: 0, max: 100, step: 1, unit: '%' },
@@ -293,7 +322,7 @@ export const shooterSpec: SubsystemSpec = {
     { key: 'turretSpeed', label: 'Turret turn speed', kind: 'number', default: 360, min: 30, max: 1080, step: 10, unit: '°/s', showIf: 'turret' },
     { key: 'autoRange', label: 'Adjusts speed and angle for distance', kind: 'boolean', default: false },
     { key: 'slowInAuto', label: 'Different fire rate in auto', kind: 'boolean', default: false },
-    { key: 'autoRate', label: 'Fire rate in auto, each lane', kind: 'number', default: 3, min: 0.5, max: 25, unit: 'pieces/s', showIf: 'slowInAuto' },
+    { key: 'autoRate', label: 'Fire rate in auto, each lane', kind: 'number', default: 3, min: 0.5, max: 32, unit: 'pieces/s', showIf: 'slowInAuto' },
     { key: 'tiltCorrection', label: 'Corrects for the robot leaning (on the bump or on fuel)', kind: 'boolean', default: false },
   ],
   upgrade: (def, chassis) => {

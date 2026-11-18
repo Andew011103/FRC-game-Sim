@@ -69,6 +69,8 @@ export interface RobotDefinition {
   team?: string;
   /** The team's icon as a small image data URL, for the scoreboard. */
   icon?: string;
+  /** How strong the robot is, 0.0 to 100.0. Set for official robots only, so multiplayer alliances can be made even. */
+  epa?: number;
   /**
    * Whether the robot fits under low bars such as the trench. 'auto' goes by
    * its shape; 'trench' always fits; 'bump' never does and must go over.

@@ -317,20 +317,27 @@ function strip(alliance: Alliance, near: number, far: number): Pick<Area, 'minX'
   return { minX: Math.min(a, b), maxX: Math.max(a, b) };
 }
 
-/** An alliance's zone, out to the far edge of its tape line. A robot touching this is "in" its zone. */
+/**
+ * An alliance's starting line: the tape at the edge of its zone, in line with
+ * the near face of its hub and bumps. A robot starts with its bumpers or
+ * frame touching it.
+ */
 export function startZone(alliance: Alliance): Area {
-  return { ...strip(alliance, 0, FIELD.zoneDepth + TAPE / 2), minZ: -HALF_WIDTH, maxZ: HALF_WIDTH };
+  return { ...strip(alliance, FIELD.zoneDepth - TAPE / 2, FIELD.zoneDepth + TAPE / 2), minZ: -HALF_WIDTH, maxZ: HALF_WIDTH };
 }
+
+/** The hub's base reaches a centimetre over the line, so robots in front of it stop just short. */
+const HUB_BASE_OVER_LINE = 0.012;
 
 /**
  * The floor a starting robot may stand on: its alliance zone, and the lanes
  * between each trench block and the side wall. A robot that fits under the
  * trench bar may be under it; any other must stop short of the bar. The
- * robot must also be touching its zone (see startZone), which limits how far
+ * robot must also be touching its starting line (see startZone), which limits how far
  * down a lane it can go.
  */
 export function startAreas(alliance: Alliance, underBars: boolean): Area[] {
-  const areas: Area[] = [{ ...strip(alliance, 0, FIELD.zoneDepth), minZ: -HALF_WIDTH, maxZ: HALF_WIDTH }];
+  const areas: Area[] = [{ ...strip(alliance, 0, FIELD.zoneDepth - HUB_BASE_OVER_LINE), minZ: -HALF_WIDTH, maxZ: HALF_WIDTH }];
   const laneEnd = underBars ? HUB_FROM_WALL + 1.5 : HUB_FROM_WALL - TRENCH.bar / 2 - 0.02;
   for (const side of [-1, 1]) {
     const inner = side * (HALF_WIDTH - TRENCH.opening);

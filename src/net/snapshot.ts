@@ -25,6 +25,8 @@ export interface MatchState {
   phaseElapsed: number;
   elapsed: number;
   finished: boolean;
+  hold?: number;
+  holdReason?: 'start' | 'pause' | null;
   points: Record<Alliance, Record<string, number>>;
   counts: Record<Alliance, Record<string, number>>;
   /** Points each robot scored itself. */
@@ -255,6 +257,8 @@ export function matchState(sim: SimWorld): MatchState | null {
     phaseElapsed: match.phaseElapsed,
     elapsed: match.elapsed,
     finished: match.finished,
+    hold: match.hold,
+    holdReason: match.holdReason,
     points: match.points,
     counts: match.counts,
     solo: sim.robots.map((_, i) => match.solo[i] ?? 0),
@@ -271,6 +275,8 @@ export function applyMatchState(sim: SimWorld, state: MatchState): void {
   match.phaseElapsed = state.phaseElapsed;
   match.elapsed = state.elapsed;
   match.finished = state.finished;
+  match.hold = Math.max(0, Number(state.hold) || 0);
+  match.holdReason = state.holdReason === 'start' || state.holdReason === 'pause' ? state.holdReason : null;
   match.solo.length = 0;
   for (const points of Array.isArray(state.solo) ? state.solo : []) match.solo.push(Number(points) || 0);
   for (const alliance of ['blue', 'red'] as const) {

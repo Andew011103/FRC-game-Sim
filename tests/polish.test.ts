@@ -46,10 +46,15 @@ describe('starting position', () => {
     expect(pose.x + 0.7).toBeLessThan(-8.27 + 4.626);
   });
 
-  it('anywhere inside the zone is allowed as it is', () => {
+  it('a robot placed deep in its zone is moved up to touch the starting line, turned as it was', () => {
     const areas = rebuilt2026.startAreas!('blue', false);
-    const pose = fitStart(areas, zone, half, { x: -6, z: 1, yaw: 0.3 })!;
-    expect(pose).toEqual({ x: -6, z: 1, yaw: 0.3 });
+    const pose = fitStart(areas, zone, half, { x: -7, z: 1, yaw: Math.PI / 4 })!;
+    const reach = (half.x + half.z) * Math.SQRT1_2;
+    expect(pose.yaw).toBeCloseTo(Math.PI / 4);
+    expect(pose.z).toBeCloseTo(1);
+    // Its front corner is on the tape, and it is not past the line into the hub.
+    expect(pose.x + reach).toBeGreaterThan(line - 0.026);
+    expect(pose.x + reach).toBeLessThanOrEqual(line);
   });
 });
 

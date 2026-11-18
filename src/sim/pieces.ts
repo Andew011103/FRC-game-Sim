@@ -93,8 +93,8 @@ export class PieceSet {
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(x, group.radius, z)
-        // Stands in for rolling resistance on carpet.
-        .setAngularDamping(0.8)
+        // Stands in for rolling resistance on carpet: a ball rolled at 3 m/s stops after about 2 m.
+        .setAngularDamping(4)
         // Stops fast shots passing through thin walls.
         .setCcdEnabled(true),
     );
@@ -102,7 +102,7 @@ export class PieceSet {
       RAPIER.ColliderDesc.ball(group.radius)
         .setMass(group.mass)
         .setRestitution(0.45)
-        .setFriction(0.4)
+        .setFriction(0.5)
         .setCollisionGroups(MOVING_GROUPS),
       body,
     );

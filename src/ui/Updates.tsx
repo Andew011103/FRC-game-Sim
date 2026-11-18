@@ -3,6 +3,32 @@ import { useGame } from './store';
 /** What changed in each update, newest first. Add a new entry at the top. */
 const UPDATES: { title: string; changes: string[] }[] = [
   {
+    title: 'Multiplayer rooms, and match day details',
+    changes: [
+      'Rooms have six driver stations: drag players between them, or to watching. Each station is its own driver camera spot.',
+      'Pick robots and starting spots in the room. The host chooses who may change robots: the host, each alliance’s player 1, or everyone.',
+      'Chat in the room, and the host can remove players or make someone else host.',
+      'If the host leaves or loses connection, another player takes the room over and the match carries on. It also keeps running in a tab out of sight.',
+      'Players who leave free their place. Anyone joining mid-match watches until it is over, and up to 16 can be in a room.',
+      'After a match, everyone returns to the same room. Open matches are listed on the Multiplayer screen.',
+      'Matches start with a 3, 2, 1 countdown and stop for 3 seconds after auto. Timed matches are the default.',
+      'Robots start touching the starting line, and can be turned 45° at a time.',
+      'Official robots show an EPA rating, coloured by rank, and the robot selector sorts by it.',
+      'Shot blockers can slide and travel in any direction as they come out, and stop shots right at the shooter.',
+      'Builder: fire rate up to 32 a second, hoppers up to 200 pieces, and a climb time of up to 10 seconds.',
+      'Each outpost starts the match with its 24 fuel inside, and takes fuel in five a second.',
+      'Fuel grips the carpet more and stops rolling much sooner.',
+    ],
+  },
+  {
+    title: 'Truer shooting, and settings in your account',
+    changes: [
+      'Shooters that adjust for distance now drop fuel into the middle of the hub instead of slightly long.',
+      'The launch angle is the steepest a shooter can use; for long shots it flattens as far as it needs to.',
+      'Signed in, your chosen robot and all your settings, controls included, follow you to any device.',
+    ],
+  },
+  {
     title: 'Player records',
     changes: [
       'A record screen for every player: matches, wins and losses, favourite robots and scores.',

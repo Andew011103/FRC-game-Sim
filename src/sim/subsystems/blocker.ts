@@ -20,13 +20,17 @@ import {
   type SubsystemSpec,
 } from './types';
 
-type Motion = 'pop' | 'rise' | 'flip';
+type Motion = 'pop' | 'rise' | 'flip' | 'slide';
 
 interface BlockerSettings extends Shape {
   deployable: boolean;
   motion: Motion;
   foldToward: Side;
   deployTime: number;
+  /** How far it travels while coming out (forward, up, right), ending where it was designed. */
+  travelX: number;
+  travelY: number;
+  travelZ: number;
 }
 
 const LEGACY_THICKNESS = 0.03;
@@ -111,7 +115,9 @@ class Blocker implements Subsystem {
   private apply(): void {
     const s = this.settings;
     const part = this.parts[0];
-    const { center } = this;
+    // Short of fully out, it is still part of the way back along its travel.
+    const back = s.deployable ? 1 - this.extent : 0;
+    const center = v3(this.center.x - s.travelX * back, this.center.y - s.travelY * back, this.center.z - s.travelZ * back);
 
     if (this.flips) {
       // Out, the box is where it was designed: usually a flat roof reaching
@@ -137,10 +143,10 @@ class Blocker implements Subsystem {
       return;
     }
 
-    // Rising panels grow from their base; the others are simply there or not.
+    // Rising panels grow from their base; sliding panels are always whole; the others are simply there or not.
     const height = s.motion === 'rise' && s.deployable ? Math.max(0.004, s.sizeY * this.extent) : s.sizeY;
     const position = v3(center.x, center.y - s.sizeY / 2 + height / 2, center.z);
-    const out = this.extent > 0;
+    const out = this.extent > 0 || (s.deployable && s.motion === 'slide');
     part.visible = out;
     part.size = [s.sizeX, height, s.sizeZ];
     part.position = position;
@@ -156,7 +162,7 @@ export const blockerSpec: SubsystemSpec = {
   type: 'blocker',
   label: 'Shot blocker',
   description:
-    'A solid box that blocks game pieces in flight. Thin and tall makes a wall; thin and flat makes a roof to hold over another robot. Shape it as it should be when out. It can appear at once, rise, or flip out from hanging down against the robot.',
+    'A solid box that blocks game pieces in flight. Thin and tall makes a wall; thin and flat makes a roof to hold over another robot. Shape it as it should be when out. It can appear at once, rise, flip out from hanging down against the robot, or slide into place, and can travel in any direction as it comes out.',
   fields: [
     ...shapeFields('#e2e8f0'),
     { key: 'deployable', label: 'Raises and lowers', kind: 'boolean', default: true },
@@ -169,6 +175,7 @@ export const blockerSpec: SubsystemSpec = {
         { value: 'pop', label: 'Appears at once' },
         { value: 'rise', label: 'Rises from its base' },
         { value: 'flip', label: 'Flips out from hanging down' },
+        { value: 'slide', label: 'Slides into place, whole the whole time' },
       ],
       ...whenDeployable,
     },
@@ -185,6 +192,9 @@ export const blockerSpec: SubsystemSpec = {
       ],
       ...whenDeployable,
     },
+    { key: 'travelX', label: 'Travels forward while coming out', kind: 'number', default: 0, min: -1.5, max: 1.5, step: 0.01, unit: 'm', ...whenDeployable },
+    { key: 'travelY', label: 'Travels up while coming out', kind: 'number', default: 0, min: -1.5, max: 1.5, step: 0.01, unit: 'm', ...whenDeployable },
+    { key: 'travelZ', label: 'Travels right while coming out', kind: 'number', default: 0, min: -1.5, max: 1.5, step: 0.01, unit: 'm', ...whenDeployable },
     { key: 'deployTime', label: 'Time to come out', kind: 'number', default: 0.3, min: 0.05, max: 2, step: 0.05, unit: 's', ...whenDeployable },
   ],
   upgrade: (def, chassis) => {

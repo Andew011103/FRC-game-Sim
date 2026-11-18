@@ -167,3 +167,19 @@ describe('aiming', () => {
     expect(converted.subsystems[0].yaw).toBeCloseTo(-10);
   });
 });
+
+describe('ranged launch', () => {
+  it("uses the shooter's angle when it can, and flattens only for shots too far for it", async () => {
+    const { launchFor } = await import('../src/sim/subsystems/shooter');
+    const deg = Math.PI / 180;
+    const near = launchFor(3, 1.2, 75 * deg, 9);
+    expect(near.pitch).toBeCloseTo(75 * deg, 6);
+    expect(near.speed).toBeLessThan(9);
+    const far = launchFor(6, 1.2, 75 * deg, 9);
+    expect(far.pitch).toBeLessThan(70 * deg);
+    expect(far.pitch).toBeGreaterThan(45 * deg);
+    expect(far.speed).toBeLessThanOrEqual(9);
+    // Never steeper than the shooter's own angle.
+    for (const distance of [1, 2, 4, 8, 12]) expect(launchFor(distance, 1.2, 50 * deg, 12).pitch).toBeLessThanOrEqual(50 * deg + 1e-9);
+  });
+});

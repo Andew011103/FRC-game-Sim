@@ -59,10 +59,17 @@ const explain = (error: { type?: string }): string =>
       ? 'This browser cannot connect to other players.'
       : 'Could not reach the service that connects players. Check your connection and try again.';
 
-/** Opens a room other players can join by its code. */
-export function openRoom(onPlayer: (transport: Transport) => void, attempt = 0): Promise<Link> {
+/** The error when a room's code is still held by someone else, such as a host who has only just left. */
+export const CODE_TAKEN = 'That room code is in use.';
+
+/**
+ * Opens a room other players can join by its code: a new code, or a given
+ * one when taking a room over from a host who left. A given code that is
+ * still in use fails with CODE_TAKEN.
+ */
+export function openRoom(onPlayer: (transport: Transport) => void, attempt = 0, given?: string): Promise<Link> {
   return new Promise((resolve, reject) => {
-    const code = newCode();
+    const code = given ?? newCode();
     const peer = new Peer(ROOM_PREFIX + code);
     let opened = false;
     peer.on('open', () => {
@@ -84,14 +91,15 @@ export function openRoom(onPlayer: (transport: Transport) => void, attempt = 0):
       if (opened) return;
       peer.destroy();
       // Another room already has this code: try another.
-      if (error.type === 'unavailable-id' && attempt < 5) openRoom(onPlayer, attempt + 1).then(resolve, reject);
+      if (error.type === 'unavailable-id' && given) reject(new Error(CODE_TAKEN));
+      else if (error.type === 'unavailable-id' && attempt < 5) openRoom(onPlayer, attempt + 1).then(resolve, reject);
       else reject(new Error(explain(error)));
     });
   });
 }
 
 /** Connects to the room with a code. */
-export function joinRoom(code: string): Promise<{ transport: Transport; link: Link }> {
+export function joinRoom(code: string, seconds = CONNECT_SECONDS): Promise<{ transport: Transport; link: Link }> {
   return new Promise((resolve, reject) => {
     const peer = new Peer();
     let settled = false;
@@ -103,7 +111,7 @@ export function joinRoom(code: string): Promise<{ transport: Transport; link: Li
     };
     const timer = setTimeout(
       () => fail('Could not connect to that match. Some networks block direct connections between players.'),
-      CONNECT_SECONDS * 1000,
+      seconds * 1000,
     );
     peer.on('error', (error) => fail(explain(error)));
     peer.on('open', () => {

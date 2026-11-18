@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import type { RobotWindow } from '../game';
 import { OFFICIAL_ROBOTS, findRobot } from '../robots';
 import { configuredGame } from '../games';
+import { epaOf } from '../robots/epa';
 import { robotStats, robotTags } from '../robots/stats';
+import { EpaTag } from './Epa';
 import type { RobotDefinition } from '../robots/types';
 import { useGame } from './store';
 
@@ -26,15 +28,19 @@ export function RobotSelect({ onWindows }: Props) {
   const setScreen = useGame((state) => state.setScreen);
   const menu = useGame((state) => state.menu);
   const gameId = useGame((state) => state.gameId);
-  const [sort, setSort] = useState<'name' | 'number'>('name');
+  const [sort, setSort] = useState<'epa' | 'name' | 'number'>('epa');
   const lowBar = useMemo(() => configuredGame(gameId).field.lowBarClearance ?? 0, [gameId]);
   const robots = useMemo(() => {
     const byName = (a: RobotDefinition, b: RobotDefinition) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     // By number, robots without one come last, in name order.
     const number = (robot: RobotDefinition) => (robot.team ? Number(robot.team) : Infinity);
-    return [...OFFICIAL_ROBOTS, ...customRobots].sort((a, b) =>
-      sort === 'number' && number(a) !== number(b) ? number(a) - number(b) : byName(a, b),
-    );
+    // By EPA, strongest first; robots without one come last, in name order.
+    const epa = (robot: RobotDefinition) => epaOf(robot) ?? -Infinity;
+    return [...OFFICIAL_ROBOTS, ...customRobots].sort((a, b) => {
+      if (sort === 'epa' && epa(a) !== epa(b)) return epa(b) - epa(a);
+      if (sort === 'number' && number(a) !== number(b)) return number(a) - number(b);
+      return byName(a, b);
+    });
   }, [customRobots, sort]);
   const picked = findRobot(robotId, customRobots);
   const stats = robotStats(picked);
@@ -58,6 +64,9 @@ export function RobotSelect({ onWindows }: Props) {
         <div className="sort-by">
           <span className="muted">Sort by</span>
           <div className="toggle-pair" role="group" aria-label="Sort robots by">
+            <button className={sort === 'epa' ? 'selected' : ''} onClick={() => setSort('epa')}>
+              EPA
+            </button>
             <button className={sort === 'name' ? 'selected' : ''} onClick={() => setSort('name')}>
               Name
             </button>
@@ -77,6 +86,7 @@ export function RobotSelect({ onWindows }: Props) {
               onClick={() => setRobotId(robot.id)}
             >
               <div className="robot-tile-window" id={`robot-window-${robot.id}`} />
+              <EpaTag robot={robot} className="on-tile" />
               <span className="robot-tile-name">{robot.name}</span>
               {teamNumber(robot) && <span className="robot-tile-number">{teamNumber(robot)}</span>}
               <span className="robot-tags">
@@ -93,6 +103,7 @@ export function RobotSelect({ onWindows }: Props) {
           <p className="muted">You have picked:</p>
           <div className="picked-title">
             <h2>{picked.name}</h2>
+            <EpaTag robot={picked} />
             {teamNumber(picked) && <span className="team-badge">{teamNumber(picked)}</span>}
           </div>
           <div className="robot-window">

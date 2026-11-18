@@ -1,4 +1,5 @@
 import { configuredGame } from './games';
+import { robotStart } from './games/start';
 import type { Alliance, Bonus, GameDefinition, StatusInfo } from './games/types';
 import { InputManager } from './input/manager';
 import { NEUTRAL_INPUT, type DriverInput, type InputAction } from './input/types';
@@ -19,6 +20,8 @@ import { useGame, type AllianceView, type MatchResults, type MatchView } from '.
 const MAX_STEPS_PER_FRAME = 15;
 const MAX_FRAME_TIME = MAX_STEPS_PER_FRAME * SIM_DT;
 const LIVE_UPDATE_INTERVAL = 0.1;
+/** Drawing this long behind means the browser has slowed the page, and the worker's clock takes over. */
+const STALLED_MS = 100;
 /** In auto quality, drop a level after this long below the target frame rate. */
 const AUTO_QUALITY_WINDOW = 2.5;
 const AUTO_QUALITY_MIN_FPS = 45;
@@ -66,6 +69,13 @@ export class Game {
   private autoQuality: Quality = 'high';
   private slowTime = 0;
   private slowFrames = 0;
+  /** In a multiplayer match, the driver station this player drives from. */
+  private netStation: number | null = null;
+  private hiddenClock: Worker | null = null;
+  /** When the last frame was drawn, in milliseconds. */
+  private lastDrawn = 0;
+  /** The match whose results have been shown and saved, so that happens once. */
+  private finishedSim: SimWorld | null = null;
 
   static async create(canvas: HTMLCanvasElement): Promise<Game> {
     await initPhysics();
@@ -87,6 +97,7 @@ export class Game {
     multiplayer.onMatch = this.showNetMatch;
     window.addEventListener('resize', this.onResize);
     this.frameHandle = requestAnimationFrame(this.frame);
+    this.startHiddenClock();
   }
 
   /** Shows a field behind the home screen without starting play. */
@@ -129,6 +140,7 @@ export class Game {
   /** Swaps in a newly built world. The old one is only destroyed once the new one exists. */
   private replaceWorld(sim: SimWorld, player: SimRobot | null): void {
     const old = this.sim;
+    this.netStation = null;
     this.sim = sim;
     this.player = player;
     this.view.setWorld(sim);
@@ -154,19 +166,32 @@ export class Game {
   private buildMatch(): void {
     const { gameId, gameOptions, startPose, mode, robotId, customRobots, alliance } = useGame.getState();
     const game = configuredGame(gameId, gameOptions[gameId]);
-    const sim = new SimWorld(game, { mode });
+    const sim = new SimWorld(game, { mode, pauses: true });
     const spawnIndex = Math.max(0, game.spawns.findIndex((spawn) => spawn.alliance === alliance));
-    const player = sim.addRobot(findRobot(robotId, customRobots), spawnIndex, startPose ?? undefined);
+    const robot = findRobot(robotId, customRobots);
+    const player = sim.addRobot(robot, spawnIndex, robotStart(game, robot, alliance, startPose));
     this.replaceWorld(sim, player);
     this.input.release();
   }
 
-  /** Puts a multiplayer match on screen: the host's own field, or a guest's copy of it. */
-  private readonly showNetMatch = (sim: SimWorld, robotIndex: number): void => {
+  /**
+   * Puts a multiplayer match on screen: the host's own field, or a guest's
+   * copy of it. A player with no robot in it watches from above. When the
+   * room changes hosts, the field already on screen carries on as it is.
+   */
+  private readonly showNetMatch = (sim: SimWorld, robotIndex: number, station: number): void => {
     const state = useGame.getState();
-    this.replaceWorld(sim, sim.robots[robotIndex] ?? null);
+    const player = sim.robots[robotIndex] ?? null;
+    if (sim === this.sim) {
+      this.player = player;
+      this.view.setPlayer(player?.index ?? 0);
+      this.netStation = station;
+      return;
+    }
+    this.replaceWorld(sim, player);
+    this.netStation = station;
     this.input.release();
-    state.setCamera(state.settings.defaultCamera);
+    state.setCamera(player ? state.settings.defaultCamera : 'top');
     state.setFieldCentric(state.settings.fieldCentric);
     state.setScreen('playing');
   };
@@ -187,8 +212,10 @@ export class Game {
     return this.sim.rules?.status(this.sim, alliance) ?? null;
   }
 
-  /** Shows the results, and adds the finished match to the player's record. */
+  /** Shows the results, and adds the finished match to the player's record. Once a match. */
   private finish(online: boolean, bonuses?: Bonus[]): void {
+    if (this.finishedSim === this.sim) return;
+    this.finishedSim = this.sim;
     const results = this.results(bonuses);
     // Multiplayer matches and timed singleplayer matches go on the player's record; free practice does not.
     if (this.player && this.sim.match?.mode === 'match') {
@@ -204,12 +231,16 @@ export class Game {
         players: this.sim.robots.length,
       });
     }
-    useGame.getState().showResults(results);
+    const { screen, showResults, setResults } = useGame.getState();
+    // A player looking at another screen, such as the room, is not pulled away from it.
+    if (screen === 'playing' || screen === 'paused') showResults(results);
+    else setResults(results);
   }
 
   dispose(): void {
     if (multiplayer.onMatch === this.showNetMatch) multiplayer.onMatch = null;
     cancelAnimationFrame(this.frameHandle);
+    this.hiddenClock?.terminate();
     window.removeEventListener('resize', this.onResize);
     this.input.dispose();
     this.view.dispose();
@@ -219,36 +250,61 @@ export class Game {
 
   private readonly frame = (nowMs: number): void => {
     this.frameHandle = requestAnimationFrame(this.frame);
-    const now = nowMs / 1000;
-    const delta = Math.min(MAX_FRAME_TIME, this.lastTime ? now - this.lastTime : 0);
+    this.lastDrawn = performance.now();
+    this.tick(nowMs / 1000, true);
+  };
+
+  /**
+   * A browser stops drawing a tab that is out of sight, and with it the frame
+   * loop; some slow it to a frame or two a second. A multiplayer match must
+   * not stop or slow with it, so whenever drawing stalls a clock in a worker
+   * (which the browser does not slow down) keeps the match going without
+   * drawing it.
+   */
+  private startHiddenClock(): void {
+    try {
+      const source = 'setInterval(() => postMessage(0), 1000 / 60);';
+      const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+      this.hiddenClock = new Worker(url);
+      URL.revokeObjectURL(url);
+      this.hiddenClock.onmessage = () => {
+        const stalled = document.hidden || performance.now() - this.lastDrawn > STALLED_MS;
+        if (stalled && (this.hosting() || this.joined())) this.tick(performance.now() / 1000, false);
+      };
+    } catch {
+      // Without workers a hidden tab simply pauses, as before.
+    }
+  }
+
+  /** One frame: input, simulation, and drawing when the tab is in view. */
+  private tick(now: number, visible: boolean): void {
+    const delta = Math.min(MAX_FRAME_TIME, this.lastTime ? Math.max(0, now - this.lastTime) : 0);
     this.lastTime = now;
 
     const state = useGame.getState();
     const { settings, screen } = state;
     const driverInput = this.input.read(this.player?.climbing ?? false);
     if (settings.constantIntake) driverInput.intake = true;
-    this.view.setDriverStation(settings.driverStation);
-    const quality = this.chooseQuality(settings.quality, screen === 'playing', delta);
+    // In multiplayer the driver stands at their own station; otherwise where the settings say.
+    this.view.setDriverStation(this.netStation ?? settings.driverStation);
+    const quality = this.chooseQuality(settings.quality, screen === 'playing' && visible, delta);
     this.view.setQuality(quality);
 
     const simStart = performance.now();
     const previewing = state.screen === 'builder';
     const host = this.hosting();
     const client = this.joined();
-    // A multiplayer match carries on behind the menu and the results.
-    const inMatch = screen === 'playing' || screen === 'paused' || screen === 'results' || screen === 'record';
-    const driving = screen === 'playing' ? driverInput : NEUTRAL_INPUT;
+    // A multiplayer match carries on behind every other screen. Only the playing screen drives the robot.
+    const driving = screen === 'playing' && visible ? driverInput : NEUTRAL_INPUT;
     if (client) {
       // The host runs the match. This player only sends what their driver is asking for.
-      if (inMatch) {
-        client.sendInput(driving, { fieldCentric: state.fieldCentric, autoAim: settings.autoAim });
-        if (this.sim.match?.finished && screen !== 'results') {
-          this.finish(true, client.bonuses?.[this.player?.alliance ?? 'blue']);
-        }
+      client.sendInput(driving, { fieldCentric: state.fieldCentric, autoAim: settings.autoAim });
+      if (this.sim.match?.finished) this.finish(true, client.bonuses?.[this.player?.alliance ?? 'blue']);
+    } else if (host || ((screen === 'playing' || previewing) && this.player)) {
+      if (this.player) {
+        this.player.fieldCentric = state.fieldCentric;
+        this.player.autoAim = settings.autoAim;
       }
-    } else if ((screen === 'playing' || previewing || (host && inMatch)) && this.player) {
-      this.player.fieldCentric = state.fieldCentric;
-      this.player.autoAim = settings.autoAim;
       this.accumulator += delta;
       let steps = 0;
       while (this.accumulator >= SIM_DT && steps < MAX_STEPS_PER_FRAME) {
@@ -260,8 +316,9 @@ export class Game {
       // If the device cannot keep up, slow the game down instead of spiralling.
       if (this.accumulator >= SIM_DT) this.accumulator = 0;
 
-      if (this.sim.match?.finished && screen !== 'results') this.finish(host !== null);
+      if (this.sim.match?.finished) this.finish(host !== null);
     }
+    if (!visible) return;
 
     for (const alliance of ALLIANCES) {
       this.view.setTagLight(`hub-${alliance}`, this.statusOf(alliance)?.light ?? 'on', now);
@@ -297,7 +354,7 @@ export class Game {
         this.matchView(),
       );
     }
-  };
+  }
 
   /**
    * A fixed setting is used as given. In auto, quality starts high and steps
@@ -321,8 +378,9 @@ export class Game {
 
   private matchView(): MatchView | null {
     const { match, rules } = this.sim;
-    if (!match || !rules || !this.player) return null;
-    const mine = this.statusOf(this.player.alliance);
+    if (!match || !rules) return null;
+    // Someone watching sees the score from the blue side.
+    const mine = this.statusOf(this.player?.alliance ?? 'blue');
     if (!mine) return null;
     const side = (alliance: Alliance): AllianceView => {
       const status = this.statusOf(alliance) ?? mine;
@@ -341,6 +399,10 @@ export class Game {
       phaseLabel: match.phase.label,
       phaseRemaining: match.phaseRemaining,
       remaining: match.remaining,
+      elapsed: match.elapsed,
+      hold: match.hold,
+      holdReason: match.holdReason,
+      previousPhase: match.phaseIndex > 0 ? match.phases[match.phaseIndex - 1].label : null,
       stage: mine.stage ?? null,
       blue: side('blue'),
       red: side('red'),

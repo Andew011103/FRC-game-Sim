@@ -240,7 +240,7 @@ export const hopperSpec: SubsystemSpec = {
   fields: [
     ...shapeFields('#475569'),
     { key: 'round', label: 'Round (a drum; length and width are its two diameters)', kind: 'boolean', default: false },
-    { key: 'capacity', label: 'Capacity', kind: 'number', default: 20, min: 1, max: 115, step: 1, unit: 'pieces' },
+    { key: 'capacity', label: 'Capacity', kind: 'number', default: 20, min: 1, max: 200, step: 1, unit: 'pieces' },
     { key: 'expandable', label: 'Expands', kind: 'boolean', default: false },
     {
       key: 'expandDirection',
@@ -262,7 +262,7 @@ export const hopperSpec: SubsystemSpec = {
     { key: 'extHeight', label: 'Extension height (0 = as hopper)', kind: 'number', default: 0, min: 0, max: 1.4, step: 0.01, unit: 'm', ...whenExpandable },
     { key: 'extShift', label: 'Extension moved sideways', kind: 'number', default: 0, min: -0.6, max: 0.6, step: 0.01, unit: 'm', ...whenExpandable },
     { key: 'extLift', label: 'Extension moved up', kind: 'number', default: 0, min: -0.6, max: 0.6, step: 0.01, unit: 'm', ...whenExpandable },
-    { key: 'expandedCapacity', label: 'Capacity when expanded', kind: 'number', default: 40, min: 1, max: 150, step: 1, unit: 'pieces', ...whenExpandable },
+    { key: 'expandedCapacity', label: 'Capacity when expanded', kind: 'number', default: 40, min: 1, max: 200, step: 1, unit: 'pieces', ...whenExpandable },
   ],
   upgrade: (def, chassis) => {
     const upgraded: SubsystemDef = {

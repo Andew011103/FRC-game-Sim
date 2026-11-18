@@ -1,5 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { configuredGame } from '../src/games';
 import { rebuilt2026 } from '../src/games/rebuilt-2026';
+
+/** Without an outpost, so no human player throws fuel that a test is not counting. */
+const noHumanPlayer = configuredGame('rebuilt-2026', { outpost: false });
 import { hubX } from '../src/games/rebuilt-2026/field';
 import type { GameDefinition, Spawn } from '../src/games/types';
 import { SimWorld, initPhysics } from '../src/sim/world';
@@ -21,7 +25,10 @@ describe('REBUILT', () => {
     const sim = new SimWorld(rebuilt2026);
     const robot = sim.addRobot(testRobot('swerve-shooter'));
     const loose = sim.pieces.heldBy.filter((holder) => holder === -1).length;
-    expect(loose).toBe(408 + 48 + 48);
+    const inOutposts = sim.pieces.heldBy.filter((holder) => holder === -3).length;
+    // The middle and the depots on the floor; each outpost's 24 already inside it.
+    expect(loose).toBe(408 + 48);
+    expect(inOutposts).toBe(48);
     expect(robot.held.length).toBe(8);
     sim.dispose();
   });
@@ -47,7 +54,7 @@ describe('REBUILT', () => {
   });
 
   it('fuel that lands within 3 seconds of a period ending counts for that period', () => {
-    const sim = new SimWorld(rebuilt2026, { mode: 'match' });
+    const sim = new SimWorld(noHumanPlayer, { mode: 'match' });
     // It leaves the hub about two seconds into the transition shift: this ball still counts as auto fuel.
     run(sim, input(), 21);
     dropInBlueHub(sim, 0);
@@ -79,7 +86,7 @@ describe('REBUILT', () => {
   });
 
   it('gives no points for fuel in an inactive hub', () => {
-    const sim = new SimWorld(rebuilt2026, { mode: 'match' });
+    const sim = new SimWorld(noHumanPlayer, { mode: 'match' });
     dropInBlueHub(sim, 0);
     // Blue outscored red in auto, so blue's hub is dark in shift 1.
     // Wait until shift 1's grace time is over, so the next ball counts for shift 1.
@@ -102,7 +109,7 @@ describe('REBUILT', () => {
   });
 
   it('a full match lasts 2 minutes 40 seconds, then 3 more while the last shots are counted', () => {
-    const sim = new SimWorld(rebuilt2026, { mode: 'match' });
+    const sim = new SimWorld(noHumanPlayer, { mode: 'match' });
     const robot = sim.addRobot(testRobot('swerve-shooter'));
     // Simulates a whole match, which can take a while on a busy machine.
     run(sim, input(), 159.5);
@@ -201,6 +208,30 @@ describe('REBUILT', () => {
     const robot = sim.addRobot(testRobot('swerve-defender'));
     run(sim, input({ climbUp: true }), 2);
     expect(robot.climbing).toBe(false);
+    sim.dispose();
+  });
+});
+
+describe('match pauses', () => {
+  beforeAll(() => initPhysics());
+
+  it('counts down before the start and stands still for 3 seconds after auto', () => {
+    const sim = new SimWorld(rebuilt2026, { mode: 'match', pauses: true });
+    const robot = sim.addRobot(testRobot('swerve-shooter'));
+    const start = robot.position().x;
+    run(sim, input({ driveY: 1 }), 2.5);
+    expect(sim.match!.holdReason).toBe('start');
+    expect(sim.match!.elapsed).toBe(0);
+    expect(Math.abs(robot.position().x - start)).toBeLessThan(0.02);
+    run(sim, input(), 0.6 + 20);
+    expect(sim.match!.phase.id).toBe('transition');
+    expect(sim.match!.holdReason).toBe('pause');
+    const remaining = sim.match!.remaining;
+    run(sim, input({ driveY: 1 }), 2.5);
+    expect(sim.match!.remaining).toBe(remaining);
+    run(sim, input(), 1);
+    expect(sim.match!.holding).toBe(false);
+    expect(sim.match!.remaining).toBeLessThan(remaining);
     sim.dispose();
   });
 });

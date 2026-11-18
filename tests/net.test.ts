@@ -20,7 +20,8 @@ function setup(players = 2): MatchSetup {
       id,
       name: `Player ${id}`,
       robot: id % 2 ? simbotics() : poofs(),
-      alliance: id % 2 ? ('red' as const) : ('blue' as const),
+      seat: { alliance: id % 2 ? ('red' as const) : ('blue' as const), station: Math.floor(id / 2) + 1 },
+      pose: null,
     })),
   };
 }
@@ -38,13 +39,14 @@ describe('multiplayer', () => {
     expect(decodeInput(new ArrayBuffer(9)).input).toEqual(NEUTRAL_INPUT);
   });
 
-  it('six robots start apart from each other, each with its preload', () => {
+  it('six robots start apart from each other on the starting line, each with its preload', () => {
     const sim = buildNetWorld(setup(6));
     const start = sim.robots.map((robot) => robot.position());
     for (let i = 0; i < 60; i++) sim.step([]);
     sim.robots.forEach((robot, i) => {
       expect(robot.held.length).toBe(8);
-      expect(Math.hypot(robot.position().x - start[i].x, robot.position().z - start[i].z)).toBeLessThan(0.02);
+      // A robot whose mechanisms reach past its bumpers may settle back a little from the hub in front of it.
+      expect(Math.hypot(robot.position().x - start[i].x, robot.position().z - start[i].z)).toBeLessThan(0.12);
     });
     expect(sim.robots.filter((robot) => robot.alliance === 'blue').length).toBe(3);
     sim.dispose();
@@ -57,8 +59,8 @@ describe('multiplayer', () => {
     const reader = new SnapshotReader();
     const drive = [input({ driveY: 1, intake: true }), input({ driveY: 1, shoot: true })];
     let quiet = 0;
-    for (let tick = 1; tick <= 240; tick++) {
-      host.step(tick < 180 ? drive : []);
+    for (let tick = 1; tick <= 420; tick++) {
+      host.step(tick < 360 ? drive : []);
       if (tick % 2) continue;
       const snapshot = writer.write(host, tick);
       if (tick === 2) expect(snapshot.byteLength).toBeGreaterThan(4000);
@@ -66,7 +68,7 @@ describe('multiplayer', () => {
       reader.apply(copy, snapshot);
     }
 
-    expect(reader.tick).toBe(240);
+    expect(reader.tick).toBe(420);
     host.robots.forEach((robot, i) => {
       const there = robot.position();
       const here = copy.robots[i].position();
@@ -102,20 +104,26 @@ describe('multiplayer', () => {
     const client = new ClientSession(clientEnd, '  Guest with a very long name indeed  ', simbotics(), () => time);
 
     expect(client.id).toBe(1);
-    expect(client.players.map((player) => player.alliance)).toEqual(['blue', 'red']);
-    expect(client.players[1].name).toBe('Guest with a very lo');
+    expect(client.room!.players.map((player) => player.seat)).toEqual([
+      { alliance: 'blue', station: 1 },
+      { alliance: 'red', station: 1 },
+    ]);
+    expect(client.room!.players[1].name).toBe('Guest with a very lo');
+    // An official robot arrives as itself.
+    expect(host.players[1].robot.official).toBe(true);
 
-    // The guest asks to change sides and back; the host could do the same for anyone.
-    client.chooseAlliance('blue');
-    expect(host.players[1].alliance).toBe('blue');
-    host.setAlliance(1, 'red');
-    expect(client.players[1].alliance).toBe('red');
+    // The guest moves to another station and back; the host could move anyone.
+    client.request({ type: 'seat', id: 1, seat: { alliance: 'red', station: 3 } });
+    expect(host.players[1].seat).toEqual({ alliance: 'red', station: 3 });
+    host.request(0, { type: 'seat', id: 1, seat: { alliance: 'red', station: 1 } });
+    expect(client.room!.players[1].seat).toEqual({ alliance: 'red', station: 1 });
 
     const sim = host.start('rebuilt-2026', {}, 'match', 3);
     expect(client.robotIndex).toBe(1);
     const copy = client.sim!;
     const start = copy.robots[1].position();
-    for (let tick = 0; tick < 120; tick++) {
+    // The countdown first, then two seconds of driving.
+    for (let tick = 0; tick < 300; tick++) {
       client.sendInput(input({ driveY: 1 }), { fieldCentric: true, autoAim: false });
       host.step(NEUTRAL_INPUT);
       time += 1 / 60;
@@ -131,14 +139,16 @@ describe('multiplayer', () => {
     expect(sim.robots[1].autoAim).toBe(false);
     expect(client.bonuses!.red.length).toBe(sim.rules!.bonuses(sim, 'red').length);
 
-    // A player who drops out mid-match leaves their robot standing.
+    // A player who drops out mid-match gives up their place; their robot stays on the field, undriven.
     client.close();
     host.step(NEUTRAL_INPUT);
-    expect(host.players.length).toBe(2);
+    expect(host.players.length).toBe(1);
+    expect(sim.robots.length).toBe(2);
     host.close();
+    sim.dispose();
   });
 
-  it('turns away players it cannot take', () => {
+  it('turns away players it cannot take, and puts late arrivals in to watch', () => {
     const host = new HostSession('Host', poofs());
     const join = (robot: unknown, protocol = PROTOCOL) => {
       const [hostEnd, clientEnd] = loopback();
@@ -151,13 +161,128 @@ describe('multiplayer', () => {
       clientEnd.send(JSON.stringify({ type: 'join', protocol, name: 'x', robot }));
       return refused;
     };
-    expect(join(poofs(), PROTOCOL + 1)).toMatch(/version/);
-    expect(join('not a robot')).toMatch(/robot/);
-    for (let i = 0; i < 5; i++) expect(join(poofs())).toBe('');
-    expect(host.players.filter((player) => player.alliance === 'red').length).toBe(3);
-    expect(join(poofs())).toMatch(/full/);
+    expect(join('cheesy-poofs', PROTOCOL + 1)).toMatch(/version/);
+    expect(join(42)).toMatch(/robot/);
+    for (let i = 0; i < 5; i++) expect(join('cheesy-poofs')).toBe('');
+    expect(host.players.filter((player) => player.seat?.alliance === 'red').length).toBe(3);
+    // The seventh player has no station left and watches.
+    expect(join('cheesy-poofs')).toBe('');
+    expect(host.players[6].seat).toBeNull();
     host.start('rebuilt-2026', {}, 'practice');
+    expect(host.sim!.robots.length).toBe(6);
+    // Someone arriving mid-match watches too.
+    expect(join('cheesy-poofs')).toBe('');
+    expect(host.players[7].seat).toBeNull();
+    for (let i = 0; i < 8; i++) join('cheesy-poofs');
+    expect(join('cheesy-poofs')).toMatch(/full/);
     host.close();
+    host.sim!.dispose();
+  });
+
+  it('lets each player pick only the robots the room allows, and passes chat around', () => {
+    const host = new HostSession('Host', poofs());
+    const clients = [0, 1, 2].map(() => {
+      const [hostEnd, clientEnd] = loopback();
+      host.accept(hostEnd);
+      return new ClientSession(clientEnd, 'Guest', simbotics());
+    });
+    // Blue 1 is the host, red 1 the first guest, blue 2 the second, red 2 the third.
+    const [red1, blue2, red2] = clients;
+    expect(blue2.room!.players.find((player) => player.id === blue2.id)!.seat).toEqual({ alliance: 'blue', station: 2 });
+    const robotOf = (client: ClientSession) => host.players.find((player) => player.id === client.id)!.robot.id;
+
+    // By default everyone picks their own.
+    red2.request({ type: 'robot', id: red2.id!, robot: 'cheesy-poofs' });
+    red2.request({ type: 'robot', id: red1.id!, robot: 'cheesy-poofs' });
+    expect(robotOf(red2)).toBe('cheesy-poofs');
+    expect(robotOf(red1)).toBe('simbotics');
+
+    // Player 1 of each alliance picks for their alliance.
+    host.setSettings({ robotRights: 'captain' });
+    red1.request({ type: 'robot', id: red2.id!, robot: 'simbotics' });
+    red1.request({ type: 'robot', id: blue2.id!, robot: 'cheesy-poofs' });
+    red2.request({ type: 'robot', id: red2.id!, robot: 'cheesy-poofs' });
+    expect(robotOf(red2)).toBe('simbotics');
+    expect(robotOf(blue2)).toBe('simbotics');
+
+    // Only the host.
+    host.setSettings({ robotRights: 'host' });
+    red1.request({ type: 'robot', id: red1.id!, robot: 'cheesy-poofs' });
+    expect(robotOf(red1)).toBe('simbotics');
+    host.request(0, { type: 'robot', id: red1.id!, robot: 'cheesy-poofs' });
+    expect(robotOf(red1)).toBe('cheesy-poofs');
+
+    // A guest cannot take a station someone holds; the host can, and the two swap.
+    blue2.request({ type: 'seat', id: blue2.id!, seat: { alliance: 'red', station: 1 } });
+    expect(host.players.find((player) => player.id === blue2.id)!.seat).toEqual({ alliance: 'blue', station: 2 });
+    host.request(0, { type: 'seat', id: blue2.id!, seat: { alliance: 'red', station: 1 } });
+    expect(host.players.find((player) => player.id === red1.id)!.seat).toEqual({ alliance: 'blue', station: 2 });
+
+    // Chat reaches everyone, trimmed, and nobody can flood it.
+    red2.request({ type: 'chat', text: '  good luck  ' });
+    expect(red1.chat.at(-1)).toEqual({ from: red2.id, name: 'Guest', text: 'good luck' });
+    for (let i = 0; i < 10; i++) red2.request({ type: 'chat', text: `spam ${i}` });
+    expect(host.chat.length).toBeLessThanOrEqual(5);
+
+    // The host can send a player out.
+    host.kick(red2.id!);
+    expect(red2.closedBecause).toBe('kicked');
+    expect(host.players.length).toBe(3);
+    host.close();
+  });
+
+  it('another player takes the room over when the host leaves, and the match carries on', () => {
+    const host = new HostSession('Host', poofs());
+    const links = [0, 1].map(() => loopback());
+    for (const [hostEnd] of links) host.accept(hostEnd);
+    const [first, second] = links.map(([, clientEnd]) => new ClientSession(clientEnd, 'Guest', simbotics()));
+    const sim = host.start('rebuilt-2026', {}, 'match', 5);
+    for (let tick = 0; tick < 240; tick++) host.step(input({ driveY: 1 }));
+    expect(host.successor()).toBe(first.id);
+
+    // The host leaves: everyone is told who takes over.
+    host.handOver(first.id!, false);
+    host.close();
+    sim.dispose();
+    expect(first.closedBecause).toBe('handover');
+    expect(second.handoverTo).toBe(first.id);
+
+    // The first guest opens the room again from its copy of the field; the second reconnects to it.
+    const room = { ...first.room!, players: first.room!.players.filter((player) => player.id !== first.room!.hostId) };
+    const next = new HostSession('Guest', simbotics(), undefined, {
+      myId: first.id!,
+      room: { ...room, hostId: -1 },
+      chat: first.chat,
+      sim: first.sim,
+      setup: first.setup,
+    });
+    const [hostEnd, clientEnd] = loopback();
+    next.accept(hostEnd);
+    const back = new ClientSession(clientEnd, 'Guest', simbotics(), undefined, undefined, {
+      id: second.id!,
+      sim: second.sim,
+      setup: second.setup,
+      chat: second.chat,
+    });
+    expect(back.id).toBe(second.id);
+    expect(next.players.map((player) => player.id)).toEqual([first.id, second.id]);
+    // Nobody started a new match: the second guest keeps the field it had, and it follows the new host's.
+    expect(back.sim).toBe(second.sim);
+    const clock = next.sim!.match!.elapsed;
+    const robot = next.robotOf(second.id!);
+    const from = next.sim!.robots[robot].position();
+    for (let tick = 0; tick < 120; tick++) {
+      // Backwards, away from the hub its station faces.
+      back.sendInput(input({ driveY: -1 }));
+      next.step(NEUTRAL_INPUT);
+    }
+    expect(next.sim!.match!.elapsed).toBeGreaterThan(clock + 1.9);
+    // The second guest drives its own robot on the new host's field, and sees it move on its own.
+    expect(Math.abs(next.sim!.robots[robot].position().x - from.x)).toBeGreaterThan(1);
+    expect(back.sim!.robots[robot].position().x).toBeCloseTo(next.sim!.robots[robot].position().x, 2);
+    next.close();
+    next.sim!.dispose();
+    back.sim!.dispose();
   });
 });
 
@@ -186,8 +311,11 @@ describe("each robot's own score", () => {
   beforeAll(() => initPhysics());
 
   it('credits fuel to the robot that shot it, and reaches other players', () => {
-    const sim = buildNetWorld(setup());
+    // Without an outpost, so the human player's fuel does not land in the hub too.
+    const sim = buildNetWorld({ ...setup(), options: { outpost: false } });
     const match = sim.match!;
+    // Past the countdown, so the field is live.
+    for (let i = 0; i < 190; i++) sim.step([]);
     const goal = sim.game.goals!.find((g) => g.alliance === 'blue')!;
     const drop = (piece: number) =>
       sim.pieces.release(piece, { x: (goal.min[0] + goal.max[0]) / 2, y: goal.max[1] - 0.05, z: (goal.min[2] + goal.max[2]) / 2 }, { x: 0, y: 0, z: 0 });

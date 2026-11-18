@@ -5,6 +5,7 @@ import { DEFAULT_ROBOT_ID } from '../robots';
 import { loadCustomRobots, saveCustomRobots } from '../robots/custom';
 import type { RobotDefinition } from '../robots/types';
 import { loadSettings, saveSettings, type Quality, type Settings } from '../settings';
+import type { ChatLine, RoomSettings, Seat } from '../net/protocol';
 import type { MatchMode } from '../sim/match';
 import { EMPTY_STATS, type PlayerStats } from '../stats';
 
@@ -26,6 +27,7 @@ export type Screen =
   | 'singleplayer'
   | 'multiplayer'
   | 'record'
+  | 'signin'
   | 'robots'
   | 'rules'
   | 'settings'
@@ -61,6 +63,13 @@ export interface MatchView {
   /** Seconds left in the current period and in the whole match. */
   phaseRemaining: number;
   remaining: number;
+  /** Seconds the clock has run. */
+  elapsed: number;
+  /** Seconds the robots are still held still, and why: the countdown before the start or the pause after a period. */
+  hold: number;
+  holdReason: 'start' | 'pause' | null;
+  /** The period before this one, for "Auto over". */
+  previousPhase: string | null;
   /** Which part of teleop this is, counted from 1, or null in auto and in practice. */
   stage: { index: number; total: number } | null;
   blue: AllianceView;
@@ -83,15 +92,34 @@ export interface TeamView {
   icon: string | null;
 }
 
+/** One player in a multiplayer room. */
+export interface RoomPlayerView {
+  id: number;
+  name: string;
+  robot: RobotDefinition;
+  /** Their driver station, or null while watching. */
+  seat: Seat | null;
+  /** Where their robot starts, or null for their station's usual spot. */
+  pose: StartPose | null;
+  accountId?: string;
+}
+
 /** The multiplayer room this player is in, as the interface shows it. */
 export interface RoomView {
   role: 'host' | 'guest';
   code: string;
   /** This player's id among the players. */
   myId: number;
-  /** Whether a match has been started. */
+  hostId: number;
+  /** Whether a match is being played. */
   playing: boolean;
-  players: { id: number; name: string; robot: string; alliance: Alliance; accountId?: string }[];
+  players: RoomPlayerView[];
+  settings: RoomSettings;
+  chat: ChatLine[];
+  /** Something happening to the room, such as reconnecting after the host left. */
+  notice: string | null;
+  /** Whether there is a match on this player's screen to go back to. */
+  hasMatch: boolean;
 }
 
 /** Another player whose record can be looked up. */
@@ -156,6 +184,9 @@ interface GameState {
   /** The screen the record screen goes back to. */
   recordReturn: Screen;
   showRecord: (player: PlayerRef | null) => void;
+  /** The screen the sign-in screen goes back to. */
+  signinReturn: Screen;
+  showSignIn: () => void;
   /** Robots the player made in the builder, saved in this browser. */
   customRobots: RobotDefinition[];
   /** Adds a custom robot, or replaces the one with the same id. */
@@ -174,6 +205,8 @@ interface GameState {
   cycleCamera: () => void;
   setLive: (telemetry: Telemetry, match: MatchView | null) => void;
   showResults: (results: MatchResults) => void;
+  /** Keeps a match's results without showing them. */
+  setResults: (results: MatchResults) => void;
 }
 
 const initialSettings = loadSettings();
@@ -183,7 +216,8 @@ export const useGame = create<GameState>((set) => ({
   ready: false,
   screen: 'home',
   gameId: 'rebuilt-2026',
-  mode: 'practice',
+  // A timed match unless the player's account says they last chose free practice.
+  mode: 'match',
   robotId: DEFAULT_ROBOT_ID,
   alliance: 'blue',
   gameOptions: {},
@@ -227,6 +261,8 @@ export const useGame = create<GameState>((set) => ({
       // Opening one record from another keeps the way back to where the player started.
       recordReturn: state.screen === 'record' ? state.recordReturn : state.screen,
     })),
+  signinReturn: 'home',
+  showSignIn: () => set((state) => ({ screen: 'signin', signinReturn: state.screen === 'signin' ? state.signinReturn : state.screen })),
   customRobots: loadCustomRobots(),
   saveRobot: (robot) =>
     set((state) => {
@@ -269,4 +305,5 @@ export const useGame = create<GameState>((set) => ({
     })),
   setLive: (telemetry, match) => set({ telemetry, match }),
   showResults: (results) => set({ results, screen: 'results' }),
+  setResults: (results) => set({ results }),
 }));

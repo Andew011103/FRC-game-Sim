@@ -16,14 +16,20 @@ export function PauseMenu({ onRestart }: { onRestart: () => void }) {
         <button className="primary" onClick={() => setScreen('playing')}>
           Resume
         </button>
+        {room && (
+          <button className="secondary" onClick={() => setScreen('multiplayer')}>
+            Return to room
+          </button>
+        )}
         {(!room || room.role === 'host') && (
           <button className="secondary" onClick={room ? () => multiplayer.start() : onRestart}>
             {room ? 'Restart for everyone' : 'Restart'}
           </button>
         )}
         <button className="secondary" onClick={room ? () => multiplayer.leave() : () => setScreen(menu)}>
-          {room?.role === 'host' ? 'End match for everyone' : 'Leave match'}
+          {room ? 'Leave the room' : 'Leave match'}
         </button>
+        {room?.role === 'host' && <p className="hint">If you leave, another player takes the room over and the match carries on.</p>}
       </div>
     </div>
   );

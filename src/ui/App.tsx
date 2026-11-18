@@ -13,6 +13,7 @@ import { Results } from './Results';
 import { RobotSelect } from './RobotSelect';
 import { Rules } from './Rules';
 import { Scoreboard } from './Scoreboard';
+import { SignIn } from './SignIn';
 import { SettingsScreen } from './SettingsScreen';
 import { Singleplayer } from './Singleplayer';
 import { Updates } from './Updates';
@@ -75,6 +76,7 @@ export function App() {
       {screen === 'singleplayer' && <Singleplayer onStart={start} onWindows={windows} />}
       {screen === 'multiplayer' && <Multiplayer />}
       {screen === 'record' && <Record />}
+      {screen === 'signin' && <SignIn />}
       {screen === 'robots' && <RobotSelect onWindows={windows} />}
       {screen === 'rules' && <Rules />}
       {screen === 'settings' && <SettingsScreen />}

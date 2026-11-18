@@ -48,13 +48,13 @@ export class SimWorld {
   constructor(
     readonly game: GameDefinition,
     /** `robots` is how many robots will be added, when that is more than the game's usual starting spots. */
-    options: { seed?: number; mode?: MatchMode; robots?: number } = {},
+    options: { seed?: number; mode?: MatchMode; robots?: number; pauses?: boolean } = {},
   ) {
     this.world = new RAPIER.World(v3(0, -9.81, 0));
     this.world.timestep = SIM_DT;
     this.random = seededRandom(options.seed ?? 1);
     this.rules = game.createRules?.() ?? null;
-    this.match = this.rules ? new Match(this.rules.phases, options.mode ?? 'practice') : null;
+    this.match = this.rules ? new Match(this.rules.phases, options.mode ?? 'practice', options.pauses ?? false) : null;
 
     const { length, width } = game.field;
     this.addFixedBox({ size: [length + 8, 1, width + 8], position: [0, -0.5, 0], color: '#000000' }, 0.9);
@@ -82,6 +82,7 @@ export class SimWorld {
 
     const reserve = (game.preload ?? 0) * Math.max(game.spawns.length, options.robots ?? 0);
     this.pieces = new PieceSet(this.world, game.pieces ?? [], reserve);
+    this.rules?.init?.(this);
   }
 
   /** Puts a robot on one of the game's starting spots, or at a place of the caller's choosing on that alliance. */
@@ -133,7 +134,8 @@ export class SimWorld {
   /** Advances one fixed step. inputs[i] drives robots[i]. */
   step(inputs: DriverInput[]): void {
     // Robots stop responding once the game says the drivers' time is up.
-    const driving = this.rules?.driving?.(this) ?? true;
+    // They also stand still through the countdown and the pause after auto.
+    const driving = (this.rules?.driving?.(this) ?? true) && !this.match?.holding;
     this.robots.forEach((robot, i) => robot.step(this, driving ? (inputs[i] ?? NEUTRAL_INPUT) : NEUTRAL_INPUT));
     for (const prop of this.props) {
       const t = prop.body.translation();
@@ -146,7 +148,8 @@ export class SimWorld {
     this.returnStrays();
 
     if (this.rules && this.match && !this.match.finished) {
-      this.rules.step(this);
+      // Nothing happens on the field before the countdown ends.
+      if (this.match.holdReason !== 'start') this.rules.step(this);
       const ended = this.match.advance(SIM_DT);
       if (ended) this.rules.phaseEnded(this, ended);
     }
@@ -185,6 +188,32 @@ export class SimWorld {
         Math.atan2(clampTo(z, halfWidth - 1) - from.z, clampTo(x, halfLength - 1) - from.x) + (this.random() - 0.5) * 0.6;
       const speed = 2.5 + this.random();
       pieces.release(i, from, v3(Math.cos(bearing) * speed, 2, Math.sin(bearing) * speed));
+    }
+  }
+
+  /**
+   * Turns a copy of the field that was only drawn from snapshots into one
+   * that is simulated, as when a player takes a room over from a host who
+   * left: every body is put where the copy shows it, at rest, and woken.
+   */
+  takeOver(): void {
+    const still = v3();
+    for (const robot of this.robots) {
+      robot.body.setLinvel(still, true);
+      robot.body.setAngvel(still, true);
+    }
+    for (const prop of this.props) prop.body.wakeUp();
+    const { pieces } = this;
+    for (let i = 0; i < pieces.count; i++) {
+      const body = pieces.bodies[i];
+      if (pieces.heldBy[i] !== -1) {
+        body.setEnabled(false);
+        continue;
+      }
+      body.setEnabled(true);
+      body.setTranslation(pieces.position(i), true);
+      body.setLinvel(still, true);
+      body.setAngvel(still, true);
     }
   }
 

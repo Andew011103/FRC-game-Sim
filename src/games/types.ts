@@ -98,6 +98,8 @@ export interface Bonus {
 export interface GameRules {
   /** The periods of a full match, in order. */
   phases: Phase[];
+  /** Called once the field is built, before anything moves. */
+  init?(sim: SimWorld): void;
   /** Called after every simulation step. */
   step(sim: SimWorld): void;
   /** Called once when a period finishes. */

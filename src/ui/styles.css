@@ -1409,14 +1409,19 @@ option {
 
 .screen-body.selector {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr);
+  /* The robots and the chosen robot's details each take half; only the robots scroll. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 22px;
   overflow: hidden;
 }
 
 .robot-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  min-height: 0;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  /* Every card keeps its full height; the list scrolls instead of squeezing them. */
+  grid-auto-rows: max-content;
   align-content: start;
   gap: 10px;
   overflow-y: auto;
@@ -1443,7 +1448,9 @@ option {
 }
 
 .robot-tile-window {
+  width: 100%;
   aspect-ratio: 4 / 3;
+  flex-shrink: 0;
 }
 
 .robot-tile-name {
@@ -1485,8 +1492,10 @@ option {
 }
 
 .picked-title {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
 }
 
 .picked-title h2 {
@@ -1586,6 +1595,7 @@ option {
   .screen-body.single,
   .screen-body.selector {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
     overflow-y: auto;
   }
 
@@ -1803,4 +1813,345 @@ option {
   justify-content: space-between;
   gap: 10px;
   font-size: 13px;
+}
+
+/* The countdown before a timed match, and the pause after auto. */
+.countdown {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+}
+.countdown span {
+  font-size: clamp(64px, 16vw, 180px);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  animation: countdown-pop 1s ease-out;
+}
+.countdown.pause span {
+  font-size: clamp(40px, 8vw, 96px);
+}
+.countdown small {
+  font-size: clamp(24px, 4vw, 48px);
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+.countdown.go span {
+  color: #4ade80;
+}
+@keyframes countdown-pop {
+  from {
+    transform: scale(1.4);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.field-map svg.locked {
+  cursor: default;
+}
+.field-map .other-robot .robot {
+  opacity: 0.45;
+}
+.field-map .other-robot text {
+  font-size: 0.32px;
+  fill: #fff;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* A robot's EPA: a rounded tag coloured by where it ranks among official robots. */
+.epa-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+  color: #1f2430;
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.robot-tile {
+  position: relative;
+}
+.epa-tag.on-tile {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+}
+.picked-title {
+  align-items: center;
+  gap: 8px;
+}
+
+/* The multiplayer room: stations and settings on the left, chat and starting spots on the right. */
+.screen-body.room {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .screen-body.room {
+    grid-template-columns: 1fr;
+  }
+}
+.room-main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.room-top {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.room-top .lobby-code {
+  margin: 0;
+}
+.room-alliances {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.alliance-epa {
+  font-size: 0.8em;
+  font-weight: 500;
+}
+.seat-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  padding: 6px;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  background: var(--raised);
+}
+.seat-slot.empty {
+  border-color: var(--border);
+  background: none;
+}
+.seat-number {
+  width: 22px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--muted);
+}
+.drop-over {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.spectators {
+  display: grid;
+  gap: 8px;
+}
+.player-chip {
+  position: relative;
+  flex: 1;
+  display: grid;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+.player-chip.mine {
+  border-color: var(--accent);
+}
+.player-chip.draggable {
+  cursor: grab;
+}
+.player-chip-name {
+  padding-right: 28px;
+}
+.player-chip-robot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.player-chip-robot select {
+  flex: 1;
+  min-width: 0;
+}
+.host-tag {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.player-actions {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+}
+.player-actions summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0 6px;
+  font-weight: 700;
+}
+.player-actions summary::-webkit-details-marker {
+  display: none;
+}
+.player-actions-menu {
+  position: absolute;
+  right: 0;
+  top: 22px;
+  z-index: 3;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  min-width: 180px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.player-actions-menu button {
+  text-align: left;
+}
+.room-settings {
+  display: grid;
+  gap: 10px;
+}
+.room-side {
+  display: grid;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 160px);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.room-tabs {
+  justify-self: start;
+}
+.chat {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-height: 300px;
+}
+.chat-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.chat-lines li.mine strong {
+  color: var(--accent);
+}
+.chat-form {
+  display: flex;
+  gap: 6px;
+}
+.chat-form input {
+  flex: 1;
+  min-width: 0;
+}
+.start-positions {
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+}
+.open-rooms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.open-rooms li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--raised);
+}
+.player-list-watching {
+  grid-column: 1 / -1;
+}
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.chat-form input,
+.field input[type='number'] {
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.room-settings .stepper-value {
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.room-side .field-map svg {
+  width: 100%;
+}
+
+/* The Multiplayer screen before joining: record and hosting on the left third, open matches on the rest. */
+.screen-body.entrance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  align-items: start;
+}
+.entrance-left {
+  display: grid;
+  gap: 12px;
+}
+.record-summary {
+  display: flex;
+  gap: 18px;
+  margin: 0;
+}
+.record-summary div {
+  display: grid;
+}
+.record-summary strong {
+  font-size: 20px;
+}
+@media (max-width: 820px) {
+  .screen-body.entrance {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Signing in or making an account. */
+.signin {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 10px;
+}
+.centered-body {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+}
+.record-summary dd {
+  margin: 0;
 }

@@ -1,3 +1,4 @@
+import { cleanEpa } from './epa';
 import { SUBSYSTEM_SPECS } from '../sim/subsystems';
 import { resolveFields, resolveSettings } from '../sim/subsystems/types';
 import { CHASSIS_FIELDS, DRIVE_FIELDS, MAX_SUBSYSTEMS, WHEEL_INSET, WHEEL_RADIUS } from './spec';
@@ -67,6 +68,8 @@ export function sanitizeRobot(raw: unknown): RobotDefinition | null {
     color,
     team: teamOf(data),
     icon: iconOf(data),
+    // Kept so the official builder can set it; it is only ever shown for official robots.
+    epa: cleanEpa(data.epa),
     traversal: data.traversal === 'trench' || data.traversal === 'bump' ? data.traversal : 'auto',
     chassis: size,
     drivetrain,

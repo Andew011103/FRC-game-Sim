@@ -147,8 +147,8 @@ describe('new mechanisms', () => {
     for (let i = 0; i < 5; i++) {
       sim.pieces.release(i, { x: -8.03, y: 0.08, z: 3.05 + i * 0.16 }, { x: -2, y: 0, z: 0 });
     }
-    run(sim, input(), 0.3);
-    // They have left the field: the human player holds them and throws one at a time.
+    run(sim, input(), 1.2);
+    // The outpost takes them in five a second; then the human player holds them and throws one at a time.
     const states = [0, 1, 2, 3, 4].map((i) => sim.pieces.heldBy[i]);
     expect(states.filter((state) => state === -3).length).toBeGreaterThanOrEqual(4);
     run(sim, input(), 8);

@@ -1,4 +1,7 @@
-import type { Area } from './types';
+import { outlineOf } from '../robots/chassis';
+import { fitsUnder } from '../robots/stats';
+import type { RobotDefinition } from '../robots/types';
+import type { Alliance, Area, GameDefinition } from './types';
 
 export interface Pose {
   x: number;
@@ -40,4 +43,36 @@ export function fitStart(
     }
   }
   return best;
+}
+
+/** Where a robot starts a match when nobody has placed it: lined up with its driver station, on the starting line. */
+export function stationSpot(game: GameDefinition, alliance: Alliance, station: number): Pose {
+  const usual = game.spawns.find((spawn) => spawn.alliance === alliance) ?? game.spawns[0];
+  // The same side of the field as the driver station: 1 and 3 mirror each other, 2 is the middle.
+  const side = alliance === 'blue' ? -1 : 1;
+  const stationZ = -side * (game.field.driverStationZ ?? 0) * (2 - station);
+  const z = station === 2 || stationZ === 0 ? 0 : Math.sign(stationZ) * Math.abs(usual.z);
+  return { x: usual.x, z, yaw: usual.yaw };
+}
+
+/**
+ * Where a robot actually starts: the spot asked for (or its station's usual
+ * one) moved to the nearest place the game allows. A robot that fits nowhere
+ * at that angle keeps the spot asked for.
+ */
+export function robotStart(
+  game: GameDefinition,
+  robot: RobotDefinition,
+  alliance: Alliance,
+  want: Pose | null,
+  station = 1,
+): Pose {
+  const pose = want ?? stationSpot(game, alliance, station);
+  const outline = outlineOf(robot.chassis);
+  const half = { x: (outline.front + outline.back) / 2, z: (outline.left + outline.right) / 2 };
+  const { length, width } = game.field;
+  const areas = game.startAreas?.(alliance, fitsUnder(robot, game.field.lowBarClearance ?? 0)) ?? [
+    { minX: -length / 2, maxX: length / 2, minZ: -width / 2, maxZ: width / 2 },
+  ];
+  return fitStart(areas, game.startZone?.(alliance) ?? null, half, pose) ?? pose;
 }

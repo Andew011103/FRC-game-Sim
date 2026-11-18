@@ -1,5 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { configuredGame } from '../src/games';
 import { rebuilt2026 } from '../src/games/rebuilt-2026';
+
+/** Without an outpost, so no human player throws fuel that a test is not counting. */
+const noHumanPlayer = configuredGame('rebuilt-2026', { outpost: false });
 import { hubX } from '../src/games/rebuilt-2026/field';
 import type { GameDefinition, Spawn } from '../src/games/types';
 import { sanitizeRobot } from '../src/robots/custom';
@@ -70,7 +74,7 @@ describe('REBUILT field', () => {
   });
 
   it('only fuel inside the six-sided opening scores', () => {
-    const sim = new SimWorld(rebuilt2026, { mode: 'match' });
+    const sim = new SimWorld(noHumanPlayer, { mode: 'match' });
     // Above a corner of the hub's box, outside the funnel: it bounces off and scores nothing.
     sim.pieces.release(0, { x: hubX('blue') + 0.5, y: 2.3, z: 0.5 }, { x: 0, y: 0, z: 0 });
     // Off centre: it lands on the funnel's sloping side and rolls down through the hole.

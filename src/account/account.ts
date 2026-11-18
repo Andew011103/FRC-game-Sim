@@ -1,4 +1,6 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { readSettings } from '../settings';
+import { findRobot } from '../robots';
 import { EMPTY_STATS, loadStats, recordMatch, withMatch, type FinishedMatch, type PlayerStats } from '../stats';
 import { useGame } from '../ui/store';
 
@@ -26,6 +28,7 @@ const cleanName = (name: unknown): string => (typeof name === 'string' ? name.tr
 export function initAccount(): void {
   useGame.getState().setRecord(loadStats());
   if (!supabase) return;
+  watchPreferences();
   // Supabase must not be called from inside this callback, so the work is put off a moment.
   supabase.auth.onAuthStateChange((_event, session) => {
     setTimeout(() => void showUser(session?.user ?? null), 0);
@@ -42,15 +45,68 @@ async function showUser(user: User | null): Promise<void> {
   if (state.account?.id === user.id) return;
 
   // A player signing in for the first time has no profile yet: give them the name they signed up with.
-  const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle();
+  let { data: profile, error } = await supabase
+    .from('profiles')
+    .select('display_name, preferences')
+    .eq('id', user.id)
+    .maybeSingle();
+  // A database set up before preferences were saved has no such column.
+  if (error) ({ data: profile } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle());
   let name = profile?.display_name as string | undefined;
   if (!name) {
     name = cleanName(user.user_metadata?.display_name ?? state.settings.displayName);
     await supabase.from('profiles').upsert({ id: user.id, display_name: name });
   }
   state.setAccount({ id: user.id, email: user.email ?? '', name });
-  state.updateSettings({ displayName: name });
+  const preferences = (profile as { preferences?: unknown } | null)?.preferences;
+  if (preferences && typeof preferences === 'object') {
+    applyPreferences(preferences as Record<string, unknown>, name);
+  } else {
+    state.updateSettings({ displayName: name });
+    // The first time on an account, it takes this browser's choices.
+    void savePreferences();
+  }
   state.setRecord((await fetchRecord(user.id)) ?? EMPTY_STATS);
+}
+
+/** True while choices from the account are being put in place, so they are not sent straight back. */
+let applying = false;
+
+/** Puts the robot and settings saved in the account in place of this browser's. */
+function applyPreferences(preferences: Record<string, unknown>, name: string): void {
+  const state = useGame.getState();
+  applying = true;
+  try {
+    state.updateSettings({ ...readSettings(preferences.settings), displayName: name });
+    // A custom robot made on another device is not in this browser; then the robot here stays.
+    const robotId = preferences.robotId;
+    if (typeof robotId === 'string' && findRobot(robotId, state.customRobots).id === robotId) state.setRobotId(robotId);
+    // Free practice only when the player last chose it; otherwise a timed match.
+    state.setMode(preferences.mode === 'practice' ? 'practice' : 'match');
+  } finally {
+    applying = false;
+  }
+}
+
+/** Saves the chosen robot and the settings to the account. */
+async function savePreferences(): Promise<void> {
+  const { account, settings, robotId, mode } = useGame.getState();
+  if (!supabase || !account) return;
+  const preferences = { robotId, settings, mode };
+  const { error } = await supabase.from('profiles').update({ preferences }).eq('id', account.id);
+  if (error) console.warn('Saving settings to the account failed:', error.message);
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Saves the robot and settings to the account a moment after they change, so a run of changes is one save. */
+function watchPreferences(): void {
+  useGame.subscribe((state, previous) => {
+    if (applying || !state.account || state.account.id !== previous.account?.id) return;
+    if (state.settings === previous.settings && state.robotId === previous.robotId && state.mode === previous.mode) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => void savePreferences(), 1500);
+  });
 }
 
 async function fetchRecord(userId: string): Promise<PlayerStats | null> {
@@ -89,6 +145,48 @@ export async function fetchPlayer(accountId: string): Promise<{ name: string; st
   ]);
   const name = profile.data?.display_name as string | undefined;
   return name && stats ? { name, stats } : null;
+}
+
+/** A room in the list of open matches. */
+export interface OpenRoom {
+  code: string;
+  host: string;
+  players: number;
+  spectators: number;
+  playing: boolean;
+}
+
+/** Puts a room in the list of open matches, or brings its entry up to date. Only whoever has its secret can. */
+export async function listRoom(entry: OpenRoom & { secret: string }): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase.rpc('put_room', {
+    p_code: entry.code,
+    p_secret: entry.secret,
+    p_host: entry.host.slice(0, 20),
+    p_players: entry.players,
+    p_spectators: entry.spectators,
+    p_playing: entry.playing,
+  });
+  if (error) console.warn('Listing the room failed:', error.message);
+}
+
+export async function unlistRoom(code: string, secret: string): Promise<void> {
+  if (!supabase) return;
+  await supabase.rpc('drop_room', { p_code: code, p_secret: secret });
+}
+
+/** The rooms open right now, or null if the list cannot be read. */
+export async function fetchRooms(): Promise<OpenRoom[] | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc('open_rooms');
+  if (error || !Array.isArray(data)) return null;
+  return (data as Record<string, unknown>[]).map((row) => ({
+    code: String(row.code),
+    host: String(row.host_name ?? 'Host'),
+    players: Number(row.players) || 0,
+    spectators: Number(row.spectators) || 0,
+    playing: row.playing === true,
+  }));
 }
 
 /** Signs in. Returns what went wrong, or null. */

@@ -38,9 +38,9 @@ describe('fouls', () => {
 
   it('in auto, hitting an opponent after fully crossing the centre line is a major foul', () => {
     const sim = new SimWorld(rebuilt(), { mode: 'match' });
-    // Blue starts wholly on the red half and drives into a red robot.
-    sim.addRobot(plain(), 0, { x: 1.0, z: 2.5, yaw: 0 });
-    sim.addRobot(plain(), 1, { x: 2.2, z: 2.5, yaw: Math.PI });
+    // Blue starts wholly on the red half, clear of the fuel in the middle, and drives into a red robot.
+    sim.addRobot(plain(), 0, { x: 1.3, z: 2.5, yaw: 0 });
+    sim.addRobot(plain(), 1, { x: 2.5, z: 2.5, yaw: Math.PI });
     run(sim, input({ driveY: 1 }), 1);
     expect(sim.match!.points.red['Opponent fouls']).toBe(15);
     expect(sim.match!.points.blue['Opponent fouls']).toBeUndefined();

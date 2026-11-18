@@ -78,7 +78,7 @@ export function Record() {
               {account
                 ? `Signed in as ${account.email}. Your username and record follow you to any device.`
                 : accountsAvailable
-                  ? 'This record is kept in this browser. Sign in on the Multiplayer screen to keep it, and your username, on every device.'
+                  ? 'This record is kept in this browser. Sign in from the main menu to keep it, and your username, on every device.'
                   : 'This record is kept in this browser.'}
             </p>
           )}

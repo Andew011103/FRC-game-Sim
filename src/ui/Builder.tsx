@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { OFFICIAL_ROBOTS } from '../robots';
 import { newRobot, sanitizeRobot } from '../robots/custom';
+import { cleanEpa } from '../robots/epa';
 import { BUMPER_FIELDS, DRIVE_FIELDS, FRAME_FIELDS, MAX_SUBSYSTEMS } from '../robots/spec';
 import type { RobotDefinition, Traversal } from '../robots/types';
 import { SUBSYSTEM_SPECS } from '../sim/subsystems';
@@ -357,6 +358,19 @@ export function Builder({ onPreview, onTestDrive }: Props) {
           )}
         </div>
         <p className="hint">The number is painted in white on the bumpers; both show on the scoreboard in a match.</p>
+        {import.meta.env.DEV && (
+          <label className="field">
+            <span>EPA, 0.0 to 100.0 (official robots only)</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              value={draft.epa ?? ''}
+              onChange={(event) => change({ ...draft, epa: cleanEpa(event.target.value) })}
+            />
+          </label>
+        )}
         <input
           ref={iconInput}
           type="file"

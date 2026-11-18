@@ -49,6 +49,7 @@ export function Hud() {
 
   return (
     <div className="hud">
+      <Countdown />
       <div className="hud-bottom-left">
         {telemetry.climbLevel > 0 && <div className="panel hud-climb">Tower level {telemetry.climbLevel}</div>}
         {telemetry.capacity > 0 && (
@@ -102,4 +103,36 @@ export function Hud() {
       )}
     </div>
   );
+}
+
+/** How long "GO!" stays up once the match starts. */
+const GO_SECONDS = 0.8;
+
+/** The big 3, 2, 1, GO before a timed match, and the pause after auto. */
+function Countdown() {
+  const match = useGame((state) => state.match);
+  if (!match || match.mode !== 'match') return null;
+  if (match.holdReason === 'start') {
+    return (
+      <div className="countdown" aria-live="assertive">
+        <span key={Math.ceil(match.hold)}>{Math.max(1, Math.ceil(match.hold))}</span>
+      </div>
+    );
+  }
+  if (match.holdReason === 'pause') {
+    return (
+      <div className="countdown pause" aria-live="assertive">
+        <span>{(match.previousPhase ?? 'Period').toUpperCase()} OVER</span>
+        <small>{Math.max(1, Math.ceil(match.hold))}</small>
+      </div>
+    );
+  }
+  if (match.elapsed < GO_SECONDS) {
+    return (
+      <div className="countdown go" aria-live="assertive">
+        <span>GO!</span>
+      </div>
+    );
+  }
+  return null;
 }

@@ -1,3 +1,4 @@
+import { accountsAvailable } from '../account/account';
 import { useGame, type Screen } from './store';
 
 /** What each button on the first screen leads to. Null means it is not built yet. */
@@ -16,6 +17,10 @@ export function Home() {
   const setScreen = useGame((state) => state.setScreen);
   const showRecord = useGame((state) => state.showRecord);
   const ready = useGame((state) => state.ready);
+  const account = useGame((state) => state.account);
+  const showSignIn = useGame((state) => state.showSignIn);
+  // Without an account linked, the record entry leads to signing in instead.
+  const signedOut = accountsAvailable && !account;
 
   return (
     <div className="home">
@@ -27,9 +32,11 @@ export function Home() {
             key={entry.label}
             className="home-button"
             disabled={entry.screen === null || !ready}
-            onClick={() => (entry.screen === 'record' ? showRecord(null) : entry.screen && setScreen(entry.screen))}
+            onClick={() =>
+              entry.screen === 'record' ? (signedOut ? showSignIn() : showRecord(null)) : entry.screen && setScreen(entry.screen)
+            }
           >
-            <span>{entry.label}</span>
+            <span>{entry.screen === 'record' && signedOut ? 'Sign in' : entry.label}</span>
             {entry.note && <span className="note">{entry.note}</span>}
           </button>
         ))}

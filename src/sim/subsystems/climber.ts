@@ -18,6 +18,8 @@ import {
 interface ClimberSettings extends Shape {
   maxLevel: number;
   speed: number;
+  /** Seconds to go from the floor to the top; 0 climbs at the speed instead. */
+  climbTime: number;
 }
 
 /** How close the robot's centre must be to its tower to grab on. */
@@ -63,8 +65,9 @@ class Climber implements Subsystem {
     }
 
     const top = this.topHeight(this.tower!, rest);
-    if (input.climbUp) this.height = Math.min(top, this.height + this.settings.speed * dt);
-    else if (input.climbDown) this.height = Math.max(rest, this.height - this.settings.speed * dt);
+    const speed = this.settings.climbTime > 0 ? Math.max(0.01, top - rest) / this.settings.climbTime : this.settings.speed;
+    if (input.climbUp) this.height = Math.min(top, this.height + speed * dt);
+    else if (input.climbDown) this.height = Math.max(rest, this.height - speed * dt);
 
     robot.body.setNextKinematicTranslation(v3(this.hold.x, this.height, this.hold.z));
     robot.body.setNextKinematicRotation(this.hold.rot);
@@ -125,6 +128,7 @@ export const climberSpec: SubsystemSpec = {
     ...shapeFields('#a3e635'),
     { key: 'maxLevel', label: 'Highest level', kind: 'number', default: 1, min: 1, max: 3, step: 1 },
     { key: 'speed', label: 'Climb speed', kind: 'number', default: 0.5, min: 0.1, max: 2, unit: 'm/s' },
+    { key: 'climbTime', label: 'Time to climb to the top (0 = use the speed)', kind: 'number', default: 0, min: 0, max: 10, step: 0.1, unit: 's' },
   ],
   upgrade: (def, chassis) => ({
     x: -outlineOf(chassis).back * 0.5,
