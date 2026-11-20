@@ -221,7 +221,11 @@ export function Builder({ onPreview, onTestDrive }: Props) {
         </section>
         <section className="card">
         <h2>Bumpers</h2>
-        <p className="hint">How far the bumper sticks out past the frame on each side. Zero leaves that side bare.</p>
+        <p className="hint">
+          {chassis.round
+            ? 'A round frame has one ring of bumper: set how far it sticks out with Front.'
+            : 'How far the bumper sticks out past the frame on each side. Zero leaves that side bare.'}
+        </p>
         <Fields
           fields={BUMPER_FIELDS}
           values={chassis}
@@ -438,7 +442,7 @@ export function Fields({
   return (
     <div className="fields">
       {fields
-        .filter((field) => !field.showIf || values[field.showIf] === true)
+        .filter((field) => (!field.showIf || values[field.showIf] === true) && (!field.hideIf || values[field.hideIf] !== true))
         .map((field) => (
           <FieldEditor
             key={field.key}

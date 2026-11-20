@@ -210,6 +210,8 @@ export type HostMessage =
   | { type: 'start'; setup: Omit<MatchSetup, 'players'> & { players: WirePlayer[] } }
   | { type: 'match'; state: MatchState }
   | { type: 'kicked' }
+  /** The host ended the match early: everyone goes back to the room. */
+  | { type: 'ended' }
   /** The host is handing the room to another player: everyone reconnects to them under the same code. */
   | { type: 'handover'; hostId: number; stays: boolean };
 

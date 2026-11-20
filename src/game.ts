@@ -141,6 +141,7 @@ export class Game {
   private replaceWorld(sim: SimWorld, player: SimRobot | null): void {
     const old = this.sim;
     this.netStation = null;
+    useGame.getState().setWatching(false);
     this.sim = sim;
     this.player = player;
     this.view.setWorld(sim);
@@ -186,10 +187,12 @@ export class Game {
       this.player = player;
       this.view.setPlayer(player?.index ?? 0);
       this.netStation = station;
+      state.setWatching(player === null);
       return;
     }
     this.replaceWorld(sim, player);
     this.netStation = station;
+    state.setWatching(player === null);
     this.input.release();
     state.setCamera(player ? state.settings.defaultCamera : 'top');
     state.setFieldCentric(state.settings.fieldCentric);
@@ -433,11 +436,22 @@ export class Game {
     }
     if (state.screen !== 'playing') return;
     if (action === 'toggleFieldCentric') state.setFieldCentric(!state.fieldCentric);
+    else if (action === 'cycleCamera' && state.watching) this.nextWatchView();
     else if (action === 'cycleCamera') state.cycleCamera();
     // Resetting starts the whole field again, not just the robot. The camera and control mode stay as they are.
     // In multiplayer only the host can start the match again, from the menu.
     else if (action === 'reset' && !this.hosting() && !this.joined()) this.buildMatch();
   };
+
+  /** A watcher's camera: from above, then following each robot in turn, then from above again. */
+  private nextWatchView(): void {
+    const state = useGame.getState();
+    const current = state.watchTarget;
+    const next = current === null ? 0 : current + 1 < this.sim.robots.length ? current + 1 : null;
+    state.setWatching(true, next);
+    state.setCamera(next === null ? 'top' : 'follow');
+    this.view.setPlayer(next ?? 0);
+  }
 
   private readonly onResize = (): void => {
     this.view.resize();

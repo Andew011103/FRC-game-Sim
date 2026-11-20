@@ -146,6 +146,10 @@ class Multiplayer {
       this.publish();
       this.showMatch(sim, client.setup, client.id ?? -1);
     };
+    client.onEnded = () => {
+      this.publish();
+      this.backToRoom();
+    };
     client.onClose = (because) => {
       if (this.client === client) this.lost(client, because);
     };
@@ -155,6 +159,20 @@ class Multiplayer {
   private showMatch(sim: SimWorld, setup: MatchSetup | null, myId: number): void {
     const index = setup?.players.findIndex((player) => player.id === myId) ?? -1;
     this.onMatch?.(sim, index, index === -1 ? 1 : setup!.players[index].seat.station);
+  }
+
+  /** Host only: ends the match being played, for everyone, and goes back to the room. */
+  endMatch(): void {
+    if (!this.host) return;
+    this.host.endMatch();
+    this.backToRoom();
+  }
+
+  /** Takes this player from the match back to the room screen. */
+  private backToRoom(): void {
+    const state = useGame.getState();
+    state.setWatching(false);
+    if (state.screen === 'playing' || state.screen === 'paused' || state.screen === 'results') state.setScreen('multiplayer');
   }
 
   /** Host only: starts a match, or starts it again, with everyone who has a seat. */

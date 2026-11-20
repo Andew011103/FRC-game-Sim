@@ -2155,3 +2155,16 @@ option {
 .record-summary dd {
   margin: 0;
 }
+
+/* Someone watching a multiplayer match. */
+.hud-watching {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+  padding: 10px 16px;
+}

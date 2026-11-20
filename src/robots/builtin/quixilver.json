@@ -87,7 +87,7 @@
       "moveAccuracy": 88,
       "turret": true,
       "turretSpeed": 900,
-      "autoRange": false,
+      "autoRange": true,
       "slowInAuto": false,
       "autoRate": 3,
       "tiltCorrection": false

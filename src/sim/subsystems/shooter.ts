@@ -33,6 +33,8 @@ interface ShooterSettings extends Shape {
   slowInAuto: boolean;
   autoRate: number;
   tiltCorrection: boolean;
+  /** Seconds the shooter waits once it is lined up before the first shot. */
+  aimDelay: number;
 }
 
 const GRAVITY = 9.81;
@@ -103,6 +105,8 @@ class Shooter implements Subsystem {
   /** Time until each lane can fire again. Lanes run on their own clocks, so shots come out staggered. */
   private readonly cooldowns: number[];
   private firing = false;
+  /** Seconds the shooter has been lined up with shoot held. */
+  private linedUpFor = 0;
   /** Launch direction in the robot's own space. */
   private yaw: number;
   private readonly restYaw: number;
@@ -214,7 +218,11 @@ class Shooter implements Subsystem {
     // Some robots are set to fire at a different rate while they drive themselves.
     const rate = s.slowInAuto && sim.match?.phase.id === 'auto' ? s.autoRate : s.rate;
     const wasFiring = this.firing;
-    this.firing = input.shoot && (s.turret || !robot.autoAim || Math.abs(error) <= FIRE_WINDOW + trailing);
+    // A turret normally fires while it is still turning. Given an aim delay, it lines up first, like a fixed shooter.
+    const lined = !robot.autoAim || Math.abs(error) <= FIRE_WINDOW + trailing || (s.turret && s.aimDelay <= 0);
+    // Once lined up, it waits out its aim delay before the first shot, and again whenever it loses the target.
+    this.linedUpFor = input.shoot && lined ? this.linedUpFor + dt : 0;
+    this.firing = input.shoot && lined && this.linedUpFor >= s.aimDelay - 1e-9;
     if (!this.firing) return;
 
     if (!wasFiring) {
@@ -282,6 +290,7 @@ class Shooter implements Subsystem {
   }
 
   reset(): void {
+    this.linedUpFor = 0;
     this.cooldowns.fill(0);
     this.firing = false;
     this.yaw = this.restYaw;
@@ -317,6 +326,7 @@ export const shooterSpec: SubsystemSpec = {
     { key: 'rate', label: 'Fire rate, each lane', kind: 'number', default: 6, min: 0.5, max: 32, unit: 'pieces/s' },
     { key: 'spread', label: 'Inaccuracy', kind: 'number', default: 1.5, min: 0, max: 15, unit: '°' },
     { key: 'timingJitter', label: 'Uneven shot timing', kind: 'number', default: 30, min: 0, max: 90, step: 1, unit: '%' },
+    { key: 'aimDelay', label: 'Aim delay: wait once lined up before shooting', kind: 'number', default: 0, min: 0, max: 3, step: 0.05, unit: 's' },
     { key: 'moveAccuracy', label: 'Shoot on the Move', kind: 'number', default: 50, min: 0, max: 100, step: 1, unit: '%' },
     { key: 'turret', label: 'Turret', kind: 'boolean', default: false },
     { key: 'turretSpeed', label: 'Turret turn speed', kind: 'number', default: 360, min: 30, max: 1080, step: 10, unit: '°/s', showIf: 'turret' },

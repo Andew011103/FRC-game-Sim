@@ -30,8 +30,12 @@ function outlinePoints(robot: RobotDefinition, pose: StartPose, sx: (x: number) 
   const cos = Math.cos(pose.yaw);
   const sin = Math.sin(pose.yaw);
   const point = (lx: number, lz: number) => `${sx(pose.x + lx * cos + lz * sin)},${sy(pose.z - lx * sin + lz * cos)}`;
+  // A round robot is drawn as a circle.
+  const corners = robot.chassis.round
+    ? Array.from({ length: 24 }, (_, i) => point(halfX * Math.cos((i * Math.PI) / 12), halfX * Math.sin((i * Math.PI) / 12)))
+    : [point(halfX, -halfZ), point(halfX, halfZ), point(-halfX, halfZ), point(-halfX, -halfZ)];
   return {
-    body: [point(halfX, -halfZ), point(halfX, halfZ), point(-halfX, halfZ), point(-halfX, -halfZ)].join(' '),
+    body: corners.join(' '),
     arrow: [point(halfX + 0.28, 0), point(halfX + 0.02, -0.16), point(halfX + 0.02, 0.16)].join(' '),
   };
 }

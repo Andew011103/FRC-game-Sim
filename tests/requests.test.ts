@@ -117,3 +117,75 @@ describe('starting line', () => {
     }
   });
 });
+
+describe('round frames, aim delay and ending a match', () => {
+  beforeAll(() => initPhysics());
+
+  it('a round frame is a disc with one bumper ring, its wheels inside it, and it drives', () => {
+    const def = sanitizeRobot({ chassis: { round: true, length: 0.8, width: 0.5, bumperFront: 0.1, bumperLeft: 0 }, drivetrain: { type: 'swerve' }, subsystems: [] })!;
+    expect(def.chassis.width).toBe(0.8);
+    expect(def.chassis.bumperLeft).toBe(0.1);
+    // Each wheel is as far in from the edge of the circle as on a square frame.
+    const corner = Math.hypot(def.drivetrain.wheelBase / 2, def.drivetrain.trackWidth / 2);
+    expect(corner).toBeCloseTo(0.4 - 0.07, 3);
+    const sim = new SimWorld(testField());
+    const robot = sim.addRobot(def);
+    const start = robot.position();
+    run(sim, input({ driveY: 1 }), 1);
+    expect(Math.hypot(robot.position().x - start.x, robot.position().z - start.z)).toBeGreaterThan(1.5);
+    expect(robot.half.x).toBeCloseTo(0.5);
+    expect(robot.half.z).toBeCloseTo(0.5);
+    sim.dispose();
+  });
+
+  it('a shooter with an aim delay waits that long once lined up before its first shot', () => {
+    const firstShot = (aimDelay: number, turret: boolean): number => {
+      const pieces: PieceGroup[] = [{ shape: 'ball', radius: 0.075, mass: 0.2, color: '#ffffff', positions: [[4, 3]] }];
+      const def = sanitizeRobot({
+        chassis: {},
+        drivetrain: { type: 'swerve' },
+        subsystems: [{ type: 'hopper', capacity: 5 }, { type: 'shooter', autoRange: true, speed: 14, spread: 0, turret, aimDelay }],
+      })!;
+      // The target is straight ahead, so the robot is lined up from the start.
+      const sim = new SimWorld(testField({ pieces, targets: [{ alliance: 'blue', position: [-2, 1, 0] }] }));
+      const robot = sim.addRobot(def);
+      robot.store(sim, 0);
+      run(sim, input(), 0.3);
+      let time = 0;
+      let fired = -1;
+      run(sim, input({ shoot: true }), 2, () => {
+        time += 1 / 60;
+        if (fired < 0 && robot.held.length === 0) fired = time;
+      });
+      sim.dispose();
+      return fired;
+    };
+    expect(firstShot(0, false)).toBeLessThan(0.05);
+    expect(firstShot(0.8, false)).toBeGreaterThan(0.75);
+    expect(firstShot(0.8, false)).toBeLessThan(0.9);
+    expect(firstShot(0, true)).toBeLessThan(0.05);
+    expect(firstShot(0.5, true)).toBeGreaterThan(0.45);
+  });
+
+  it('the host can end the match for everyone, and the room is open again', async () => {
+    const { loopback } = await import('../src/net/protocol');
+    const { ClientSession, HostSession } = await import('../src/net/session');
+    const { findRobot } = await import('../src/robots');
+    const host = new HostSession('Host', findRobot('cheesy-poofs'));
+    const [hostEnd, clientEnd] = loopback();
+    host.accept(hostEnd);
+    const guest = new ClientSession(clientEnd, 'Guest', findRobot('simbotics'));
+    let ended = false;
+    guest.onEnded = () => (ended = true);
+    const sim = host.start('rebuilt-2026', {}, 'match', 2);
+    for (let i = 0; i < 30; i++) host.step(input());
+    expect(guest.room!.playing).toBe(true);
+    host.endMatch();
+    expect(ended).toBe(true);
+    expect(guest.sim).toBeNull();
+    expect(guest.room!.playing).toBe(false);
+    expect(host.sim).toBeNull();
+    host.close();
+    sim.dispose();
+  });
+});

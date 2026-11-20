@@ -40,11 +40,20 @@ export function sanitizeRobot(raw: unknown): RobotDefinition | null {
     bumperRight: all,
     ...chassisData,
   });
+  if (size.round) {
+    // A disc: as wide as it is long, with one ring of bumper.
+    size.width = size.length;
+    size.bumperBack = size.bumperLeft = size.bumperRight = size.bumperFront;
+  } else {
+    delete size.round;
+  }
+  // On a round frame the four wheels sit on a square inside the circle, each as far in from the edge as on a square frame.
+  const wheelSpan = size.round ? (size.length - 2 * WHEEL_INSET) / Math.SQRT2 : null;
   const type = driveData.type === 'tank' ? 'tank' : 'swerve';
   const drivetrain = {
     type,
-    wheelBase: size.length - 2 * WHEEL_INSET,
-    trackWidth: size.width - 2 * WHEEL_INSET,
+    wheelBase: wheelSpan ?? size.length - 2 * WHEEL_INSET,
+    trackWidth: wheelSpan ?? size.width - 2 * WHEEL_INSET,
     wheelRadius: WHEEL_RADIUS,
     ...resolveFields<Record<string, number>>(DRIVE_FIELDS[type], driveData),
   } as DrivetrainDef;

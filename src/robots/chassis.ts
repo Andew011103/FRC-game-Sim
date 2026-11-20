@@ -11,6 +11,11 @@ export interface Bumpers {
 
 export function bumpersOf(chassis: ChassisDef): Bumpers {
   const all = chassis.bumperThickness ?? 0.08;
+  if (chassis.round) {
+    // A round frame has one ring of bumper, the same all the way round.
+    const ring = chassis.bumperFront ?? all;
+    return { front: ring, back: ring, left: ring, right: ring, height: Math.min(chassis.bumperHeight ?? 0.13, chassis.height) };
+  }
   return {
     front: chassis.bumperFront ?? all,
     back: chassis.bumperBack ?? all,
@@ -23,6 +28,10 @@ export function bumpersOf(chassis: ChassisDef): Bumpers {
 /** How far the robot reaches from the middle of its frame on each side, bumpers included. */
 export function outlineOf(chassis: ChassisDef): { front: number; back: number; left: number; right: number } {
   const bumpers = bumpersOf(chassis);
+  if (chassis.round) {
+    const reach = chassis.length / 2 + bumpers.front;
+    return { front: reach, back: reach, left: reach, right: reach };
+  }
   return {
     front: chassis.length / 2 + bumpers.front,
     back: chassis.length / 2 + bumpers.back,

@@ -46,6 +46,8 @@ export function Hud() {
   );
   const isSwerve = robot.drivetrain.type === 'swerve';
   const heading = ((Math.round(-telemetry.headingDeg) % 360) + 360) % 360;
+  const watching = useGame((state) => state.watching);
+  if (watching) return <WatchingHud />;
 
   return (
     <div className="hud">
@@ -135,4 +137,26 @@ function Countdown() {
     );
   }
   return null;
+}
+
+/** What someone watching a multiplayer match sees: who they are following, and that they can play once it is over. */
+function WatchingHud() {
+  const target = useGame((state) => state.watchTarget);
+  const match = useGame((state) => state.match);
+  const cameraKey = useGame((state) => state.settings.keys.camera);
+  const teams = match ? [...match.blue.teams.map((team) => ['Blue', team] as const), ...match.red.teams.map((team) => ['Red', team] as const)] : [];
+  const followed = target === null ? null : teams[target];
+  return (
+    <div className="hud">
+      <Countdown />
+      <div className="panel hud-watching">
+        <strong>Watching this match</strong>
+        <span>You can take a driver station in the room once it is over.</span>
+        <span className="muted">
+          {followed ? `Following ${followed[0]} ${followed[1].number ?? followed[1].name}` : 'View from above'} · <kbd>{keyLabel(cameraKey)}</kbd> next
+          view · <kbd>Esc</kbd> menu
+        </span>
+      </div>
+    </div>
+  );
 }

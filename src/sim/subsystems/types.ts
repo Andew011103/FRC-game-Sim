@@ -17,6 +17,8 @@ interface FieldBase {
   label: string;
   /** Only shown in the builder when this other (boolean) setting is on. */
   showIf?: string;
+  /** Hidden in the builder when this other (boolean) setting is on. */
+  hideIf?: string;
   /** Shape fields are listed together in the builder, apart from what the mechanism does. */
   group?: 'shape';
 }

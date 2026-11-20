@@ -199,10 +199,12 @@ export class HostSession {
     }
     this.send(peer, { type: 'welcome', id: peer.player.id });
     this.send(peer, { type: 'chat', lines: this.chat });
-    if (this.sim && this.setup && message.match !== this.setup.seed) this.send(peer, { type: 'start', setup: this.wireSetup(this.setup) });
+    // Someone arriving during a match is sent it to watch. A match that is already over is not theirs to see:
+    // it would put them straight onto its results, and onto their record.
+    if (this.playing && this.setup && message.match !== this.setup.seed) this.send(peer, { type: 'start', setup: this.wireSetup(this.setup) });
     this.writer.requestFull();
     this.roomChanged();
-    const state = this.sim && matchState(this.sim);
+    const state = this.playing && this.sim && matchState(this.sim);
     if (state) this.send(peer, { type: 'match', state });
   }
 
@@ -330,6 +332,15 @@ export class HostSession {
     return this.sim;
   }
 
+  /** Host only: stops the match being played and sends everyone back to the room. The field is kept for whoever shows it. */
+  endMatch(): void {
+    if (!this.sim) return;
+    this.sim = null;
+    this.setup = null;
+    this.broadcast({ type: 'ended' });
+    this.roomChanged();
+  }
+
   /** Which robot on the field a player drives in this match, or -1. */
   robotOf(id: number): number {
     return this.setup?.players.findIndex((player) => player.id === id) ?? -1;
@@ -420,6 +431,8 @@ export class ClientSession {
   onChat: ((lines: ChatLine[]) => void) | null = null;
   onPose: ((id: number, pose: Pose | null) => void) | null = null;
   onStart: ((sim: SimWorld) => void) | null = null;
+  /** Called when the host ends the match early. */
+  onEnded: (() => void) | null = null;
   onClose: ((because: ClosedBecause) => void) | null = null;
   private reader = new SnapshotReader();
   private snapshotAt = 0;
@@ -474,6 +487,12 @@ export class ClientSession {
     if (message.type === 'welcome') this.id = message.id;
     else if (message.type === 'refused') this.refused = message.reason;
     else if (message.type === 'kicked') this.kicked = true;
+    else if (message.type === 'ended') {
+      this.sim = null;
+      this.setup = null;
+      this.robotIndex = -1;
+      this.onEnded?.();
+    }
     else if (message.type === 'handover') {
       this.handoverTo = Number(message.hostId);
       this.handoverStays = message.stays === true;

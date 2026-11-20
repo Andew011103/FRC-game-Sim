@@ -17,6 +17,8 @@ export interface ChassisDef {
   bumperRight?: number;
   /** Height of the bumper band, measured up from the bottom of the frame. */
   bumperHeight?: number;
+  /** A round frame: a disc whose diameter is the length, with one ring of bumper as thick as the front bumper. */
+  round?: boolean;
   /** Height of the centre of mass above the floor. Defaults to a low value. */
   comHeight?: number;
 }

@@ -332,3 +332,35 @@ describe("each robot's own score", () => {
     sim.dispose();
   });
 });
+
+describe('joining after a match', () => {
+  beforeAll(() => initPhysics());
+
+  it('a player who joins once a match is over is not sent it, and plays the next one', () => {
+    const host = new HostSession('Host', poofs());
+    const sim = host.start('rebuilt-2026', {}, 'practice', 3);
+    sim.match!.finished = true;
+    const [hostEnd, clientEnd] = loopback();
+    host.accept(hostEnd);
+    const late = new ClientSession(clientEnd, 'Late', simbotics());
+    let started = 0;
+    late.onStart = () => started++;
+    // Stepping the finished match a little while, as the host's game does.
+    for (let i = 0; i < 6; i++) host.step(NEUTRAL_INPUT);
+    expect(late.sim).toBeNull();
+    expect(started).toBe(0);
+    expect(host.players.find((player) => player.id === late.id)!.seat).not.toBeNull();
+    const next = host.start('rebuilt-2026', {}, 'practice', 4);
+    expect(started).toBe(1);
+    expect(late.robotIndex).toBeGreaterThanOrEqual(0);
+    for (let i = 0; i < 60; i++) {
+      late.sendInput(input({ driveY: -1 }));
+      host.step(NEUTRAL_INPUT);
+    }
+    const robot = late.robotIndex;
+    expect(late.sim!.robots[robot].position().x).toBeCloseTo(next.robots[robot].position().x, 2);
+    host.close();
+    sim.dispose();
+    next.dispose();
+  });
+});

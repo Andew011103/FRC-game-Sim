@@ -480,11 +480,34 @@ function buildRobotView(robot: SimRobot): RobotView {
     return mesh;
   };
 
-  part(new THREE.BoxGeometry(chassis.length, chassis.height, chassis.width), robot.def.color ?? '#9aa3af', 0.5);
+  if (chassis.round) {
+    const radius = chassis.length / 2;
+    part(new THREE.CylinderGeometry(radius, radius, chassis.height, 40), robot.def.color ?? '#9aa3af', 0.5);
+    if (bumpers.front > 0) {
+      const ring = part(new THREE.CylinderGeometry(radius + bumpers.front, radius + bumpers.front, bumpers.height, 40), ALLIANCE_COLORS[robot.alliance]);
+      ring.position.y = -hy + bumpers.height / 2;
+    }
+    // The team number on the front and back of the ring.
+    const label = robot.def.team ? numberTexture(robot.def.team) : null;
+    if (label && bumpers.front > 0) {
+      const material = new THREE.MeshBasicMaterial({ map: label.texture, transparent: true, depthWrite: false });
+      const height = bumpers.height * 0.92;
+      const width = Math.min(height * label.aspect, radius);
+      for (const side of [1, -1]) {
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width / label.aspect), material);
+        mesh.position.set(side * (radius + bumpers.front + 0.003), -hy + bumpers.height / 2, 0);
+        mesh.rotation.y = (side * Math.PI) / 2;
+        group.add(mesh);
+      }
+    }
+  } else {
+    part(new THREE.BoxGeometry(chassis.length, chassis.height, chassis.width), robot.def.color ?? '#9aa3af', 0.5);
+  }
 
   // One bumper slab per side. The front and back slabs also cover the corners.
   const bumper = (sizeX: number, sizeZ: number, x: number, z: number) => {
-    if (sizeX <= 0 || sizeZ <= 0) return;
+    // A round frame's bumper ring is drawn above.
+    if (chassis.round || sizeX <= 0 || sizeZ <= 0) return;
     const mesh = part(new THREE.BoxGeometry(sizeX, bumpers.height, sizeZ), ALLIANCE_COLORS[robot.alliance]);
     mesh.position.set(x, -hy + bumpers.height / 2, z);
   };
@@ -496,7 +519,7 @@ function buildRobotView(robot: SimRobot): RobotView {
   bumper(chassis.length, bumpers.right, 0, chassis.width / 2 + bumpers.right / 2);
 
   // The team number in white on every side that has a bumper.
-  const label = robot.def.team ? numberTexture(robot.def.team) : null;
+  const label = !chassis.round && robot.def.team ? numberTexture(robot.def.team) : null;
   if (label) {
     const material = new THREE.MeshBasicMaterial({ map: label.texture, transparent: true, depthWrite: false });
     const height = bumpers.height * 0.92;

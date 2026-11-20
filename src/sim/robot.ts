@@ -96,9 +96,24 @@ export class SimRobot {
         .setFriction(0.25)
         .setRestitution(0.05)
         .setCollisionGroups(this.movingGroups);
-    world.createCollider(solid(chassis.length / 2, hy, chassis.width / 2), this.body);
+    const round = chassis.round === true;
+    // A round frame is a disc; its bumper is a wider disc around the bottom of it.
+    const disc = (radius: number, halfY: number) =>
+      RAPIER.ColliderDesc.cylinder(halfY, radius)
+        .setDensity(0)
+        .setFriction(0.25)
+        .setRestitution(0.05)
+        .setCollisionGroups(this.movingGroups);
+    if (round) {
+      world.createCollider(disc(chassis.length / 2, hy), this.body);
+      if (hx > chassis.length / 2) {
+        world.createCollider(disc(hx, bumpers.height / 2).setTranslation(0, -hy + bumpers.height / 2, 0), this.body);
+      }
+    } else {
+      world.createCollider(solid(chassis.length / 2, hy, chassis.width / 2), this.body);
+    }
     // The bumpers are a band around the bottom of the frame, and can differ on each side.
-    if (hx > chassis.length / 2 || hz > chassis.width / 2) {
+    if (!round && (hx > chassis.length / 2 || hz > chassis.width / 2)) {
       world.createCollider(
         solid(hx, bumpers.height / 2, hz).setTranslation(
           (outline.front - outline.back) / 2,
@@ -113,7 +128,7 @@ export class SimRobot {
     if (def.traversal === 'bump') {
       const tall = BUMP_ROBOT_HEIGHT - chassis.groundClearance;
       world.createCollider(
-        RAPIER.ColliderDesc.cuboid(chassis.length / 2, tall / 2, chassis.width / 2)
+        (round ? RAPIER.ColliderDesc.cylinder(tall / 2, chassis.length / 2) : RAPIER.ColliderDesc.cuboid(chassis.length / 2, tall / 2, chassis.width / 2))
           .setTranslation(0, -hy + tall / 2, 0)
           .setDensity(0)
           .setCollisionGroups(LOW_BAR_ONLY_GROUPS),
@@ -127,7 +142,7 @@ export class SimRobot {
     const skirtHeight = Math.max(0, chassis.groundClearance - SKIRT_GAP);
     if (skirtHeight > 0.005) {
       world.createCollider(
-        RAPIER.ColliderDesc.cuboid(hx, skirtHeight / 2, hz)
+        (round ? RAPIER.ColliderDesc.cylinder(skirtHeight / 2, hx) : RAPIER.ColliderDesc.cuboid(hx, skirtHeight / 2, hz))
           .setTranslation((outline.front - outline.back) / 2, -hy - skirtHeight / 2, (outline.right - outline.left) / 2)
           .setDensity(0)
           .setFriction(0.1)

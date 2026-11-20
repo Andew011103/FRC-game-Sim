@@ -159,6 +159,11 @@ interface GameState {
   settings: Settings;
   fieldCentric: boolean;
   camera: CameraMode;
+  /** True while watching a multiplayer match without a robot in it. */
+  watching: boolean;
+  /** Which robot a watcher's camera follows, or null for the view from above. */
+  watchTarget: number | null;
+  setWatching: (watching: boolean, target?: number | null) => void;
   telemetry: Telemetry;
   match: MatchView | null;
   results: MatchResults | null;
@@ -225,6 +230,9 @@ export const useGame = create<GameState>((set) => ({
   settings: initialSettings,
   fieldCentric: initialSettings.fieldCentric,
   camera: initialSettings.defaultCamera,
+  watching: false,
+  watchTarget: null,
+  setWatching: (watching, target = null) => set({ watching, watchTarget: watching ? target : null }),
   telemetry: {
     speed: 0,
     headingDeg: 0,

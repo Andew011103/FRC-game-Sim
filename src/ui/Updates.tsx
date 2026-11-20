@@ -18,6 +18,10 @@ const UPDATES: { title: string; changes: string[] }[] = [
       'Builder: fire rate up to 32 a second, hoppers up to 200 pieces, and a climb time of up to 10 seconds.',
       'Each outpost starts the match with its 24 fuel inside, and takes fuel in five a second.',
       'Fuel grips the carpet more and stops rolling much sooner.',
+      'Builder: a round frame option, with one ring of bumper, to go with drum hoppers.',
+      'Shooters can have an aim delay: a wait once lined up before the first shot.',
+      'In a match, the host can end it for everyone from the menu; nobody else can go back to the room until it ends.',
+      'Joining a match in progress clearly shows you are watching, and the camera key steps through views of every robot.',
     ],
   },
   {
