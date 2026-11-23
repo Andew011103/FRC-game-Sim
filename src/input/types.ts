@@ -35,4 +35,4 @@ export const NEUTRAL_INPUT: DriverInput = {
   climbDown: false,
 };
 
-export type InputAction = 'toggleFieldCentric' | 'cycleCamera' | 'reset' | 'pause';
+export type InputAction = 'toggleFieldCentric' | 'cycleCamera' | 'reset' | 'pause' | 'speed1' | 'speed2' | 'speed3';

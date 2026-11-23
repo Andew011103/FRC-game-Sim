@@ -1,13 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
-import { OFFICIAL_ROBOTS } from '../robots';
-import { newRobot, sanitizeRobot } from '../robots/custom';
+import { OFFICIAL_ROBOTS, findRobot } from '../robots';
+import { MAX_SKIN_EXTRAS, newRobot, sanitizeRobot } from '../robots/custom';
 import { cleanEpa } from '../robots/epa';
-import { BUMPER_FIELDS, DRIVE_FIELDS, FRAME_FIELDS, MAX_SUBSYSTEMS } from '../robots/spec';
+import { BUMPER_FIELDS, DRIVE_FIELDS, FRAME_FIELDS, MAX_DECORATIONS, MAX_SUBSYSTEMS, isDecoration } from '../robots/spec';
 import type { RobotDefinition, Traversal } from '../robots/types';
 import { SUBSYSTEM_SPECS } from '../sim/subsystems';
 import type { FieldSpec } from '../sim/subsystems/types';
 import { Dropdown, Slider } from './controls';
 import { useGame } from './store';
+import { useUnlocked } from './passHooks';
+import { SKIN_EXTRA_TYPES, allowedLedPatterns } from '../pass/pass';
+import { saveSkinToPass } from './skins';
+import { LED_PATTERNS } from '../sim/subsystems/led';
+import { EffectPicker } from './EffectPicker';
+
+/** An LED pattern list with only the patterns this player may use (and whatever the robot already has). */
+function lockLedPatterns(field: FieldSpec, values: Record<string, unknown>, allowed: Set<string>): FieldSpec {
+  if (field.kind !== 'choice' || !field.key.endsWith('Pattern')) return field;
+  return { ...field, options: field.options.filter((option) => allowed.has(option.value) || option.value === values[field.key]) };
+}
 
 /** Whether the robot goes under the trench bar or over the bump. */
 const TRAVERSAL_OPTIONS: { value: Traversal; label: string }[] = [
@@ -17,7 +28,10 @@ const TRAVERSAL_OPTIONS: { value: Traversal; label: string }[] = [
 ];
 
 /** Settings every subsystem has; they are kept when a box is given a different job. */
-const SHAPE_KEYS = ['x', 'z', 'bottom', 'sizeX', 'sizeY', 'sizeZ'];
+const SHAPE_KEYS = ['x', 'z', 'bottom', 'sizeX', 'sizeY', 'sizeZ', 'yaw', 'pitch', 'roll'];
+
+/** The add menu's entry for a structure that is only for looks. */
+const LOOK_ONLY = 'structure:look';
 
 interface Props {
   /** Shows a robot in the 3D view behind the panel. */
@@ -32,12 +46,24 @@ export function Builder({ onPreview, onTestDrive }: Props) {
   const deleteRobot = useGame((state) => state.deleteRobot);
   const setRobotId = useGame((state) => state.setRobotId);
   const setScreen = useGame((state) => state.setScreen);
-  const [editingId, setEditingId] = useState<string | null>(customRobots[0]?.id ?? null);
+  const [editingId, setEditingId] = useState<string | null>(() => useGame.getState().builderFocus ?? customRobots[0]?.id ?? null);
+  const builderFocus = useGame((state) => state.builderFocus);
+  const setBuilderFocus = useGame((state) => state.setBuilderFocus);
+  useEffect(() => {
+    if (!builderFocus) return;
+    setEditingId(builderFocus);
+    setBuilderFocus(null);
+  }, [builderFocus, setBuilderFocus]);
   const [message, setMessage] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const iconInput = useRef<HTMLInputElement>(null);
 
   const draft = customRobots.find((robot) => robot.id === editingId) ?? null;
+  const unlocked = useUnlocked();
+  // LED patterns this player may pick: the free ones and the ones unlocked. Official robots, made while developing, may use any.
+  const ledPatterns = import.meta.env.DEV
+    ? new Set(LED_PATTERNS.map((pattern) => pattern.value))
+    : new Set([...LED_PATTERNS.filter((pattern) => pattern.free).map((pattern) => pattern.value), ...allowedLedPatterns(unlocked)]);
 
   // If the robot being edited is gone, edit another one. With none left, nothing is made until the player asks.
   useEffect(() => {
@@ -149,13 +175,26 @@ export function Builder({ onPreview, onTestDrive }: Props) {
     });
 
   /** Gives a box a different job, keeping its size and place. */
-  const relabel = (index: number, type: string) =>
+  const relabel = (index: number, type: string) => {
+    // A decoration given a working job becomes a subsystem, which needs a free place.
+    if (!skinBase && isDecoration(draft.subsystems[index]) && type !== 'led' && mechanismCount >= MAX_SUBSYSTEMS) {
+      setMessage(`This robot already has ${MAX_SUBSYSTEMS} subsystems. Remove one first to give this part a working job.`);
+      return;
+    }
     change({
       ...draft,
       subsystems: draft.subsystems.map((subsystem, i) =>
-        i === index ? { type, ...Object.fromEntries(SHAPE_KEYS.map((key) => [key, subsystem[key]])) } : subsystem,
+        i === index
+          ? {
+              type,
+              ...Object.fromEntries(SHAPE_KEYS.map((key) => [key, subsystem[key]])),
+              // In a skin, a structure is always see-through, and a see-through one stays so.
+              ...((draft.skinOf || isDecoration(subsystem)) && type === 'structure' ? { solid: false } : {}),
+            }
+          : subsystem,
       ),
     });
+  };
 
   /** Developer only: writes the robot into the game's own robots folder, making it official. */
   const saveOfficial = async () => {
@@ -172,6 +211,23 @@ export function Builder({ onPreview, onTestDrive }: Props) {
 
   const drivetrain = draft.drivetrain as unknown as Record<string, unknown>;
   const chassis = draft.chassis as unknown as Record<string, unknown>;
+  // A skin keeps the robot's frame, drivetrain and mechanisms; it may only recolour them and add see-through parts.
+  const skinBase = draft.skinOf ? findRobot(draft.skinOf.robotId) : null;
+  const baseCount = skinBase?.subsystems.length ?? 0;
+  // Working parts and parts only for looks are counted apart: LED strips and see-through structures have their own allowance.
+  const mechanismCount = draft.subsystems.filter((part) => !isDecoration(part)).length;
+  const decorationCount = draft.subsystems.length - mechanismCount;
+  const roomFor = (part: { type: string; solid?: unknown }) =>
+    skinBase
+      ? draft.subsystems.length < baseCount + MAX_SKIN_EXTRAS
+      : isDecoration(part)
+        ? decorationCount < MAX_DECORATIONS
+        : mechanismCount < MAX_SUBSYSTEMS;
+  const addable = Object.values(SUBSYSTEM_SPECS).filter((spec) => !skinBase || SKIN_EXTRA_TYPES.includes(spec.type));
+  const addOptions = [
+    ...addable.filter((spec) => roomFor({ type: spec.type })).map((spec) => ({ value: spec.type, label: spec.label })),
+    ...(!skinBase && roomFor({ type: 'structure', solid: false }) ? [{ value: LOOK_ONLY, label: 'See-through structure (only for looks)' }] : []),
+  ];
 
   return (
     <div className="builder">
@@ -197,6 +253,29 @@ export function Builder({ onPreview, onTestDrive }: Props) {
         </div>
 
         </section>
+        {skinBase ? (
+          <section className="card builder-wide">
+            <h2>Skin for {skinBase.name}</h2>
+            <p className="hint">
+              A Drive Pass skin. The frame, drivetrain, bumpers and mechanisms are {skinBase.name}'s and stay as they are, so the
+              skin cannot change how it plays. Recolour any part, and add see-through structures and LED strips anywhere. Save it to
+              the Drive Pass from the side panel.
+            </p>
+            <p className="hint">
+              A skin can also change how fuel looks in the air after this robot shoots it. While the skin is worn, its effect
+              is used instead of any game piece effect the player has equipped.
+            </p>
+            <EffectPicker
+              optional
+              value={draft.pieceEffect}
+              onChange={(pieceEffect) => {
+                const { pieceEffect: _old, ...rest } = draft;
+                change(pieceEffect ? { ...rest, pieceEffect } : rest);
+              }}
+            />
+          </section>
+        ) : (
+        <>
         <section className="card">
         <h2>Frame</h2>
         <Fields
@@ -255,16 +334,37 @@ export function Builder({ onPreview, onTestDrive }: Props) {
         />
 
         </section>
+        </>
+        )}
         <div className="builder-wide">
         <h2>
-          Subsystems ({draft.subsystems.length} of {MAX_SUBSYSTEMS})
+          {skinBase
+            ? `Parts (${draft.subsystems.length - baseCount} added, up to ${MAX_SKIN_EXTRAS})`
+            : `Subsystems (${mechanismCount} of ${MAX_SUBSYSTEMS}) · Decorations (${decorationCount} of ${MAX_DECORATIONS})`}
         </h2>
         <p className="hint">
-          Each subsystem is a box. Give it a job, then size it and place it anywhere on the robot.
+          Each subsystem is a box. Give it a job, then size it and place it anywhere on the robot. LED strips and see-through
+          structures are only for looks: they count as decorations, not subsystems, and can be turned any way.
         </p>
         </div>
         {draft.subsystems.map((subsystem, index) => {
           const spec = SUBSYSTEM_SPECS[subsystem.type];
+          // One of the robot's own mechanisms, in a skin: only its colours can change.
+          if (skinBase && index < baseCount) {
+            return (
+              <div className="subsystem card" key={index}>
+                <div className="subsystem-head">
+                  <strong>{spec.label}</strong>
+                  <span className="muted">{skinBase.name}'s own: colours only</span>
+                </div>
+                <Fields
+                  fields={spec.fields.filter((field) => field.kind === 'color')}
+                  values={subsystem}
+                  onChange={(key, value) => setSubsystem(index, key, value)}
+                />
+              </div>
+            );
+          }
           return (
             <div className="subsystem card" key={index}>
               <div className="subsystem-head">
@@ -272,15 +372,35 @@ export function Builder({ onPreview, onTestDrive }: Props) {
                   className="small"
                   label="What this box does"
                   value={subsystem.type}
-                  options={Object.values(SUBSYSTEM_SPECS).map((option) => ({ value: option.type, label: option.label }))}
+                  options={addable.map((option) => ({ value: option.type, label: option.label }))}
                   onChange={(type) => relabel(index, type)}
                 />
+                <span className="subsystem-actions">
+                <button
+                  className="small"
+                  disabled={!roomFor(subsystem)}
+                  title={!roomFor(subsystem) ? 'This robot has as many of these as it can' : 'Add an identical copy right after this one'}
+                  onClick={() =>
+                    change({
+                      ...draft,
+                      // An exact copy, every setting and colour the same, placed right after the original.
+                      subsystems: [
+                        ...draft.subsystems.slice(0, index + 1),
+                        structuredClone(subsystem),
+                        ...draft.subsystems.slice(index + 1),
+                      ],
+                    })
+                  }
+                >
+                  Duplicate
+                </button>
                 <button
                   className="small"
                   onClick={() => change({ ...draft, subsystems: draft.subsystems.filter((_, i) => i !== index) })}
                 >
                   Remove
                 </button>
+                </span>
               </div>
               <p className="hint">{spec.description}</p>
               <details className="shape" open>
@@ -292,20 +412,42 @@ export function Builder({ onPreview, onTestDrive }: Props) {
                 />
               </details>
               <Fields
-                fields={spec.fields.filter((field) => field.group !== 'shape')}
+                fields={spec.fields
+                  .filter((field) => field.group !== 'shape')
+                  // A part added by a skin is never solid.
+                  .filter((field) => !(skinBase && field.key === 'solid'))
+                  .map((field) => lockLedPatterns(field, subsystem, ledPatterns))}
                 values={subsystem}
-                onChange={(key, value) => setSubsystem(index, key, value)}
+                onChange={(key, value) => {
+                  // Making a see-through structure solid turns it into a subsystem, which needs a free place.
+                  if (key === 'solid' && value === true && isDecoration(subsystem) && mechanismCount >= MAX_SUBSYSTEMS) {
+                    setMessage(`This robot already has ${MAX_SUBSYSTEMS} subsystems, so this structure has to stay see-through.`);
+                    return;
+                  }
+                  setSubsystem(index, key, value);
+                }}
               />
+              {subsystem.type === 'led' && !import.meta.env.DEV && (
+                <p className="hint">More LED effects can be unlocked in the Drive Pass.</p>
+              )}
             </div>
           );
         })}
         <div className="builder-wide">
-        {draft.subsystems.length < MAX_SUBSYSTEMS && (
+        {addOptions.length > 0 && (
           <Dropdown
             className="small wide"
-            placeholder="Add a subsystem…"
-            options={Object.values(SUBSYSTEM_SPECS).map((spec) => ({ value: spec.type, label: spec.label }))}
-            onChange={(type) => change({ ...draft, subsystems: [...draft.subsystems, { type }] })}
+            placeholder={skinBase ? 'Add a see-through structure or LED strip…' : 'Add a subsystem or decoration…'}
+            options={addOptions}
+            onChange={(type) =>
+              change({
+                ...draft,
+                subsystems: [
+                  ...draft.subsystems,
+                  type === LOOK_ONLY || (skinBase && type === 'structure') ? { type: 'structure', solid: false } : { type },
+                ],
+              })
+            }
           />
         )}
 
@@ -337,6 +479,8 @@ export function Builder({ onPreview, onTestDrive }: Props) {
             onChange={(event) => change({ ...draft, color: event.target.value })}
           />
         </div>
+        {!skinBase && (
+        <>
         <div className="team-row">
           <input
             type="text"
@@ -375,6 +519,8 @@ export function Builder({ onPreview, onTestDrive }: Props) {
             />
           </label>
         )}
+        </>
+        )}
         <input
           ref={iconInput}
           type="file"
@@ -405,6 +551,29 @@ export function Builder({ onPreview, onTestDrive }: Props) {
         >
           Back to robots
         </button>
+        {skinBase && import.meta.env.DEV && (
+          <>
+            <h2>Drive Pass</h2>
+            {draft.skinOf!.champion ? (
+              <p className="hint">A champion skin: worn only by whoever is first on {skinBase.name}'s leaderboard, while they stay first.</p>
+            ) : (
+            <label className="field">
+              <span>Ranking Points needed</span>
+              <input
+                type="number"
+                min={0}
+                step={10}
+                value={draft.skinOf!.rp}
+                onChange={(event) => change({ ...draft, skinOf: { ...draft.skinOf!, rp: Math.max(0, Number(event.target.value) || 0) } })}
+              />
+            </label>
+            )}
+            <p className="hint">Saved as the reward "{draft.skinOf!.rewardId}", named after this robot.</p>
+            <button className="primary" onClick={() => void saveSkinToPass(draft).then(setMessage)}>
+              {draft.skinOf!.champion ? 'Save champion skin' : 'Save skin to the Drive Pass'}
+            </button>
+          </>
+        )}
         <h2>Share</h2>
         <div className="button-row">
           <button className="small" onClick={() => download(draft, false)}>
@@ -413,7 +582,7 @@ export function Builder({ onPreview, onTestDrive }: Props) {
           <button className="small" onClick={() => fileInput.current?.click()}>
             Import file
           </button>
-          {import.meta.env.DEV && (
+          {import.meta.env.DEV && !skinBase && (
             <button className="small" onClick={() => void saveOfficial()} title="Developer only">
               Save as official
             </button>

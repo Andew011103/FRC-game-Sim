@@ -222,7 +222,7 @@ describe('multiplayer', () => {
     red2.request({ type: 'chat', text: '  good luck  ' });
     expect(red1.chat.at(-1)).toEqual({ from: red2.id, name: 'Guest', text: 'good luck' });
     for (let i = 0; i < 10; i++) red2.request({ type: 'chat', text: `spam ${i}` });
-    expect(host.chat.length).toBeLessThanOrEqual(5);
+    expect(host.chat.filter((line) => !line.system).length).toBeLessThanOrEqual(5);
 
     // The host can send a player out.
     host.kick(red2.id!);
@@ -362,5 +362,59 @@ describe('joining after a match', () => {
     host.close();
     sim.dispose();
     next.dispose();
+  });
+});
+
+describe('room notes in the chat', () => {
+  it('tells everyone when players join or leave, the host changes a setting, or the host changes', () => {
+    const host = new HostSession('Host', poofs());
+    const join = (name: string) => {
+      const [hostEnd, clientEnd] = loopback();
+      host.accept(hostEnd);
+      return new ClientSession(clientEnd, name, simbotics());
+    };
+    const ana = join('Ana');
+    const ben = join('Ben');
+    host.setSettings({ robotRights: 'captain', mode: 'practice' });
+    host.setSettings({ listed: false });
+    host.kick(ben.id!);
+    const notes = () => ana.chat.filter((line) => line.system).map((line) => line.text);
+    expect(notes()).toEqual([
+      'Ana joined the room.',
+      'Ben joined the room.',
+      'The host changed the room so player 1 of each alliance picks robots for their alliance.',
+      'The host set the match to free practice, with no clock.',
+      'The host took the room off the open matches list.',
+      'Ben was removed from the room by the host.',
+    ]);
+    // Players' own messages are not notes.
+    ana.request({ type: 'chat', text: 'hi' });
+    expect(ana.chat.at(-1)).toEqual({ from: ana.id, name: 'Ana', text: 'hi' });
+
+    // The host leaves: Ana takes over, and Ben's rejoining copy shows the chat once, with the change of host.
+    const carry = { ...ana.room!, players: ana.room!.players.filter((p) => p.id !== ana.room!.hostId) };
+    host.close();
+    const next = new HostSession('Ana', simbotics(), undefined, { myId: ana.id!, oldHost: 'Host', room: { ...carry, hostId: -1 }, chat: ana.chat, sim: null, setup: null });
+    const [hostEnd, clientEnd] = loopback();
+    next.accept(hostEnd);
+    const back = new ClientSession(clientEnd, 'Cy', simbotics());
+    const texts = back.chat.map((line) => line.text);
+    expect(texts.slice(-3)).toEqual(['Host left the room.', 'Ana is now the host.', 'Cy joined the room.']);
+    expect(new Set(texts).size).toBe(texts.length);
+    next.close();
+  });
+});
+
+describe('ranking points from a match', () => {
+  it('3 for a win, 1 for a tie, and 1 for each bonus, recorded with the match', async () => {
+    const { matchRankingPoints, rankingPoints } = await import('../src/pass/pass');
+    const { EMPTY_STATS, withMatch } = await import('../src/stats');
+    expect(matchRankingPoints(700, 500, 1)).toBe(4);
+    expect(matchRankingPoints(500, 500, 0)).toBe(1);
+    expect(matchRankingPoints(400, 1000, 3)).toBe(3);
+    let stats = withMatch(EMPTY_STATS, { alliance: 'blue', blue: 700, red: 500, robot: 'X', single: false, solo: 10, bonusRp: 1 });
+    stats = withMatch(stats, { alliance: 'red', blue: 400, red: 1000, robot: 'X', single: false, solo: 10, bonusRp: 3 });
+    stats = withMatch(stats, { alliance: 'blue', blue: 90, red: 0, robot: 'X', single: true, solo: null });
+    expect(rankingPoints(stats)).toBe(4 + 6 + 1);
   });
 });

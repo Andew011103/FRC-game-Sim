@@ -1,5 +1,5 @@
 import { SUBSYSTEM_SPECS } from '../sim/subsystems';
-import { resolveSettings } from '../sim/subsystems/types';
+import { resolveSettings, turnedHalfHeight, type Turn } from '../sim/subsystems/types';
 import { frameTop } from './chassis';
 import type { RobotDefinition } from './types';
 
@@ -25,9 +25,14 @@ export function robotHeight(def: RobotDefinition): number {
     const fixed =
       part.type === 'hopper' ||
       part.type === 'shooter' ||
-      part.type === 'structure' ||
+      (part.type === 'structure' && part.solid !== false) ||
       (part.type === 'blocker' && part.deployable === false);
-    if (fixed) top = Math.max(top, num(part.bottom) + num(part.sizeY));
+    if (!fixed) continue;
+    if (part.type === 'structure') {
+      // A turned structure reaches as high as its highest corner.
+      const reach = turnedHalfHeight([num(part.sizeX), num(part.sizeY), num(part.sizeZ)], part as unknown as Turn);
+      top = Math.max(top, num(part.bottom) + num(part.sizeY) / 2 + reach);
+    } else top = Math.max(top, num(part.bottom) + num(part.sizeY));
   }
   return top;
 }

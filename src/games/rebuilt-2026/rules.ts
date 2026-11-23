@@ -1,4 +1,4 @@
-import { againstField, containsPoint, cornersOf, footprintOf, overlap } from '../../sim/contact';
+import { againstField, cornersOf, footprintOf, overlap } from '../../sim/contact';
 import { expelGoalPiece, takeGoalPieces } from '../../sim/goals';
 import type { Match, Phase } from '../../sim/match';
 import { v3 } from '../../sim/math';
@@ -46,7 +46,7 @@ export const PHASES: Phase[] = [
 ];
 
 /** A hub takes this long, in seconds, to pass fuel through. Fuel counts as it comes out, not as it goes in. */
-const HUB_SECONDS = [0.5, 0.7];
+const HUB_SECONDS = [0.45, 0.55];
 
 /** The hub lights pulse for this long before the hub goes inactive. */
 const WARNING_SECONDS = 3;
@@ -56,8 +56,8 @@ const AUTO_TOWER_ROBOTS = 2;
 const TELEOP_TOWER_POINTS = [0, 10, 20, 30];
 
 // Regional and district event thresholds.
-const ENERGIZED_FUEL = 100;
-const SUPERCHARGED_FUEL = 360;
+const ENERGIZED_FUEL = 630;
+const SUPERCHARGED_FUEL = 1000;
 const TRAVERSAL_POINTS = 50;
 
 /** The human player at an outpost: throws per second, and the share of throws aimed well enough to go in. */
@@ -99,10 +99,14 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
   /** For each pair of opposing robots, by "offender>other": contact so far. */
   const contacts = new Map<string, { touching: boolean; pinned: number; pinFouls: number }>();
 
+  /** Foul points owed to each alliance. They are added to the score only once the match is over. */
+  const owed: Record<Alliance, number> = { blue: 0, red: 0 };
+
   const foul = (sim: SimWorld, offender: Alliance, points: number): void => {
     const match = sim.match!;
-    match.addPoints(otherAlliance(offender), 'Opponent fouls', points);
+    owed[otherAlliance(offender)] += points;
     match.count(offender, points === MINOR_FOUL ? 'minorFouls' : 'majorFouls');
+    match.fouls.push({ offender, major: points !== MINOR_FOUL, at: match.elapsed });
   };
 
   const fuelFouls = (sim: SimWorld): void => {
@@ -115,22 +119,13 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
     };
     for (const i of [...leavingHub]) {
       const holder = pieces.heldBy[i];
-      const k = i * 3;
-      const grounded = pieces.cur[k + 1] <= pieces.radii[i] + 0.02;
-      if (holder >= 0) charge(sim.robots[holder]);
-      if (holder !== -1 || grounded) {
-        leavingHub.delete(i);
-        continue;
+      const grounded = pieces.cur[i * 3 + 1] <= pieces.radii[i] + 0.02;
+      // Collected before it reached the carpet: a foul only for a robot with an open-top hopper.
+      if (holder >= 0) {
+        const robot = sim.robots[holder];
+        if (robot.subsystems.some((subsystem) => subsystem.openTop)) charge(robot);
       }
-      const toucher = sim.robots.find(
-        (robot) =>
-          containsPoint(footprintOf(robot), pieces.cur[k], pieces.cur[k + 2], pieces.radii[i] + 0.02) &&
-          pieces.cur[k + 1] < robot.position().y + 0.9,
-      );
-      if (toucher) {
-        charge(toucher);
-        leavingHub.delete(i);
-      }
+      if (holder !== -1 || grounded) leavingHub.delete(i);
     }
   };
 
@@ -190,6 +185,16 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
 
   /** Fuel inside each hub, on its way through. */
   let inHub: { piece: number; goal: Goal; wait: number }[] = [];
+
+  /**
+   * Whether fuel leaving an alliance's hub right now scores: the hub is
+   * active, or was active until less than the grace time ago.
+   */
+  const hubCounting = (match: Match, alliance: Alliance): boolean => {
+    if (activeIn(match.phase.id, alliance)) return true;
+    const previous = match.phaseIndex > 0 ? match.phases[match.phaseIndex - 1] : null;
+    return previous !== null && match.phaseElapsed < GRACE_SECONDS && activeIn(previous.id, alliance);
+  };
 
   const activeIn = (phaseId: string, alliance: Alliance): boolean => {
     if (!phaseId.startsWith('shift') || firstInactive === null) return true;
@@ -316,7 +321,9 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
         const leaving = inHub.filter((entry) => entry.goal === goal && entry.wait <= 0);
         const scored = leaving.length;
         if (scored === 0) continue;
-        const active = activeIn(phase.id, goal.alliance);
+        // Fuel counts by the hub as it leaves: active now, or switched off less than the grace time ago.
+        // Fuel taken in while the hub was off still counts if the hub is on by the time it comes out.
+        const active = hubCounting(match, goal.alliance);
         for (const { piece } of leaving) {
           // A point goes to the robot that shot the fuel, if it shot at its own hub.
           const shooter = sim.robots[sim.pieces.lastRobot[piece]];
@@ -328,7 +335,7 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
         inHub = inHub.filter((entry) => entry.wait > 0 || entry.goal !== goal);
         const inAuto = phase.id === 'auto';
         if (inAuto) match.count(goal.alliance, 'autoFuel', scored);
-        if (activeIn(phase.id, goal.alliance)) {
+        if (active) {
           match.count(goal.alliance, 'activeFuel', scored);
           match.addPoints(goal.alliance, inAuto ? 'Auto fuel' : 'Teleop fuel', scored);
         } else {
@@ -360,6 +367,11 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
         }
       }
       if (match.finished) {
+        // Fouls count toward the final score, and only the final score.
+        for (const alliance of ALLIANCES) {
+          if (owed[alliance] > 0) match.addPoints(alliance, 'Opponent fouls', owed[alliance]);
+          owed[alliance] = 0;
+        }
         for (const robot of sim.robots) {
           const points = TELEOP_TOWER_POINTS[robot.climbLevel()] ?? 0;
           if (points > 0) {

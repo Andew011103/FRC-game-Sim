@@ -1,7 +1,9 @@
+import { cleanEffect } from '../pass/effects';
+import { wheelInset } from './outline';
 import { cleanEpa } from './epa';
 import { SUBSYSTEM_SPECS } from '../sim/subsystems';
 import { resolveFields, resolveSettings } from '../sim/subsystems/types';
-import { CHASSIS_FIELDS, DRIVE_FIELDS, MAX_SUBSYSTEMS, WHEEL_INSET, WHEEL_RADIUS } from './spec';
+import { CHASSIS_FIELDS, DRIVE_FIELDS, MAX_DECORATIONS, MAX_SUBSYSTEMS, WHEEL_INSET, WHEEL_RADIUS, isDecoration } from './spec';
 import { iconOf, teamOf } from './team';
 import type { ChassisDef, DrivetrainDef, RobotDefinition, SubsystemDef } from './types';
 
@@ -29,6 +31,7 @@ export function sanitizeRobot(raw: unknown): RobotDefinition | null {
   const data = raw as Record<string, unknown>;
   const driveData = asRecord(data.drivetrain);
   if (data.chassis === undefined && data.drivetrain === undefined) return null;
+  const skinOf = readSkinOf(data.skinOf);
 
   // Older files had one bumper thickness for all four sides.
   const chassisData = asRecord(data.chassis);
@@ -49,19 +52,29 @@ export function sanitizeRobot(raw: unknown): RobotDefinition | null {
   }
   // On a round frame the four wheels sit on a square inside the circle, each as far in from the edge as on a square frame.
   const wheelSpan = size.round ? (size.length - 2 * WHEEL_INSET) / Math.SQRT2 : null;
+  // Cut corners push the wheels in, so they stay inside the frame.
+  const inset = wheelInset(size, WHEEL_INSET);
   const type = driveData.type === 'tank' ? 'tank' : 'swerve';
   const drivetrain = {
     type,
-    wheelBase: wheelSpan ?? size.length - 2 * WHEEL_INSET,
-    trackWidth: wheelSpan ?? size.width - 2 * WHEEL_INSET,
+    wheelBase: wheelSpan ?? size.length - 2 * inset,
+    trackWidth: wheelSpan ?? size.width - 2 * inset,
     wheelRadius: WHEEL_RADIUS,
     ...resolveFields<Record<string, number>>(DRIVE_FIELDS[type], driveData),
   } as DrivetrainDef;
 
+  // Up to MAX_SUBSYSTEMS working parts, and up to MAX_DECORATIONS more that are only for looks.
+  // A skin adds its own see-through parts on top of the robot's.
+  let mechanisms = 0;
+  let decorations = 0;
   const subsystems: SubsystemDef[] = (Array.isArray(data.subsystems) ? data.subsystems : [])
     .map(asRecord)
     .filter((subsystem) => typeof subsystem.type === 'string' && SUBSYSTEM_SPECS[subsystem.type] !== undefined)
-    .slice(0, MAX_SUBSYSTEMS)
+    .filter((subsystem) =>
+      isDecoration(subsystem as SubsystemDef)
+        ? ++decorations <= MAX_DECORATIONS + (skinOf ? MAX_SKIN_EXTRAS : 0)
+        : ++mechanisms <= MAX_SUBSYSTEMS + (skinOf ? MAX_SKIN_EXTRAS : 0),
+    )
     .map((subsystem) => {
       const spec = SUBSYSTEM_SPECS[subsystem.type as string];
       return { type: spec.type, ...resolveSettings<Record<string, unknown>>(spec, subsystem as SubsystemDef, size) };
@@ -79,11 +92,24 @@ export function sanitizeRobot(raw: unknown): RobotDefinition | null {
     icon: iconOf(data),
     // Kept so the official builder can set it; it is only ever shown for official robots.
     epa: cleanEpa(data.epa),
+    // A skin being made may carry a game piece effect; other custom robots never do.
+    ...(skinOf ? { skinOf, ...(cleanEffect(data.pieceEffect) ? { pieceEffect: cleanEffect(data.pieceEffect) } : {}) } : {}),
     traversal: data.traversal === 'trench' || data.traversal === 'bump' ? data.traversal : 'auto',
     chassis: size,
     drivetrain,
     subsystems,
   };
+}
+
+/** How many parts a skin may add. */
+export const MAX_SKIN_EXTRAS = 12;
+
+function readSkinOf(value: unknown): RobotDefinition['skinOf'] {
+  const skin = asRecord(value);
+  const id = (text: unknown) => typeof text === 'string' && /^[a-z0-9][a-z0-9-]{0,79}$/.test(text);
+  if (!id(skin.robotId) || !id(skin.rewardId)) return undefined;
+  const rp = typeof skin.rp === 'number' && Number.isFinite(skin.rp) ? Math.max(0, Math.round(skin.rp)) : 0;
+  return { robotId: skin.robotId as string, rewardId: skin.rewardId as string, rp, ...(skin.champion === true ? { champion: true } : {}) };
 }
 
 /** A fresh custom robot, optionally starting as a copy of another one. */

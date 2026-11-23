@@ -41,6 +41,8 @@ const HUB_DECK = HUB_BOX + HUB_CHAMFER;
 /** The funnel narrows to this far across at the deck. */
 const FUNNEL_BOTTOM = 0.6;
 const HUB_PANEL = 0.03;
+/** Fuel leaves the back of the hub this high: about 3 feet, 3/5 of the hub's height. */
+const HUB_EXIT_HEIGHT = 0.95;
 
 const BUMP = { width: 1.854, depth: 1.128, angle: 15 };
 /**
@@ -299,9 +301,10 @@ function goal(alliance: Alliance): Goal {
     // Anything that has dropped through the funnel into the box.
     min: [x - inside, HUB_FLOOR + 0.02, -inside],
     max: [x + inside, HUB_DECK - 0.03, inside],
-    exits: [-0.45, -0.15, 0.15, 0.45].map((z) => ({
-      position: [x + out * (HUB_SIZE / 2 + 0.14), 0.2, z] as [number, number, number],
-      velocity: [out * 1.6, 0, 0] as [number, number, number],
+    // Out of the back of the hub, about 3 feet up (3/5 of its height), across its width.
+    exits: [-0.42, -0.21, 0, 0.21, 0.42].map((z) => ({
+      position: [x + out * (HUB_SIZE / 2 + 0.1), HUB_EXIT_HEIGHT, z] as [number, number, number],
+      velocity: [out * 1.5, 0.2, 0] as [number, number, number],
     })),
   };
 }

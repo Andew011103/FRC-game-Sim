@@ -474,11 +474,22 @@ function Chat({ room }: { room: RoomView }) {
     <div className="chat">
       <ol className="chat-lines" ref={list} aria-live="polite">
         {room.chat.length === 0 && <li className="muted">No messages yet.</li>}
-        {room.chat.map((line, i) => (
-          <li key={i} className={line.from === room.myId ? 'mine' : ''}>
-            <strong>{line.name}</strong> {line.text}
-          </li>
-        ))}
+        {room.chat.map((line, i) =>
+          line.system ? (
+            // A note from the room itself, in its own colour and without a name.
+            <li key={i} className="system">
+              {line.text}
+            </li>
+          ) : (
+            <li key={i} className={line.from === room.myId ? 'mine' : ''}>
+              {/* The sender's name in their Drive Pass colour, with their badge; plain if they have left. */}
+              <strong>
+                <PlayerName player={room.players.find((player) => player.id === line.from) ?? { name: line.name }} />
+              </strong>{' '}
+              {line.text}
+            </li>
+          ),
+        )}
       </ol>
       <form
         className="chat-form"

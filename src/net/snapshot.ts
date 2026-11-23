@@ -11,7 +11,9 @@ import type { SimWorld } from '../sim/world';
 const MM = 1000;
 const QUAT = 32767;
 const ANGLE = 32767 / Math.PI;
-const PART_FLOATS = 8;
+const PART_FLOATS = 9;
+/** A loose piece shot by robot n is sent as LAUNCHED + n. */
+const LAUNCHED = 100;
 
 /** What the snapshot says about a robot beyond where it is. */
 export interface RobotExtras {
@@ -27,6 +29,8 @@ export interface MatchState {
   finished: boolean;
   hold?: number;
   holdReason?: 'start' | 'pause' | null;
+  /** The latest fouls called, for the pop-up. */
+  fouls?: { offender: Alliance; major: boolean; at: number }[];
   points: Record<Alliance, Record<string, number>>;
   counts: Record<Alliance, Record<string, number>>;
   /** Points each robot scored itself. */
@@ -60,7 +64,7 @@ export class SnapshotWriter {
       this.full = true;
       const most =
         16 +
-        robots.reduce((sum, robot, i) => sum + 32 + robot.wheels.length * 2 + parts[i].length * 34, 0) +
+        robots.reduce((sum, robot, i) => sum + 32 + robot.wheels.length * 2 + parts[i].length * 40, 0) +
         props.length * 20 +
         pieces.count * 9;
       this.scratch = new DataView(new ArrayBuffer(most));
@@ -105,6 +109,8 @@ export class SnapshotWriter {
           part.size[0],
           part.size[1],
           part.size[2],
+          // A colour as a whole number fits a 32-bit float exactly.
+          parseInt(part.color.slice(1, 7), 16) || 0,
         ];
         const base = p * values.length;
         if (!this.full && values.every((value, k) => Math.fround(value) === sent[base + k])) return;
@@ -127,11 +133,12 @@ export class SnapshotWriter {
       const x = Math.round(pieces.cur[k] * MM);
       const y = Math.round(pieces.cur[k + 1] * MM);
       const z = Math.round(pieces.cur[k + 2] * MM);
-      const held = pieces.heldBy[i];
+      // A loose piece still in the air from a shot carries its shooter, for drawing its effect.
+      const held = pieces.heldBy[i] === -1 && pieces.launchedBy[i] >= 0 ? LAUNCHED + pieces.launchedBy[i] : pieces.heldBy[i];
       const same =
         held === this.heldSent[i] &&
         // Where a piece inside a robot was last seen does not matter.
-        (held !== -1 || (x === this.pieceSent[k] && y === this.pieceSent[k + 1] && z === this.pieceSent[k + 2]));
+        ((held !== -1 && held < LAUNCHED) || (x === this.pieceSent[k] && y === this.pieceSent[k + 1] && z === this.pieceSent[k + 2]));
       if (same && !this.full) continue;
       this.heldSent[i] = held;
       this.pieceSent[k] = x;
@@ -197,6 +204,7 @@ export class SnapshotReader {
         part.size[0] = f32();
         part.size[1] = f32();
         part.size[2] = f32();
+        part.color = `#${Math.round(f32()).toString(16).padStart(6, '0')}`;
       }
       if (!this.started) {
         robot.prevPos = robot.position();
@@ -226,7 +234,9 @@ export class SnapshotReader {
     for (let changed = u16(); changed > 0; changed--) {
       const i = u16();
       if (i >= pieces.count) throw new Error('The snapshot is for a different field.');
-      const held = view.getInt8(at++);
+      const code = view.getInt8(at++);
+      const held = code >= LAUNCHED ? -1 : code;
+      pieces.launchedBy[i] = code >= LAUNCHED ? code - LAUNCHED : -1;
       const moved = held !== pieces.heldBy[i];
       if (moved) heldChanged = true;
       pieces.heldBy[i] = held;
@@ -259,6 +269,7 @@ export function matchState(sim: SimWorld): MatchState | null {
     finished: match.finished,
     hold: match.hold,
     holdReason: match.holdReason,
+    fouls: match.fouls.slice(-4),
     points: match.points,
     counts: match.counts,
     solo: sim.robots.map((_, i) => match.solo[i] ?? 0),
@@ -276,6 +287,10 @@ export function applyMatchState(sim: SimWorld, state: MatchState): void {
   match.elapsed = state.elapsed;
   match.finished = state.finished;
   match.hold = Math.max(0, Number(state.hold) || 0);
+  for (const foul of Array.isArray(state.fouls) ? state.fouls : []) {
+    const known = match.fouls.some((other) => other.at === foul.at && other.offender === foul.offender);
+    if (!known && (foul.offender === 'blue' || foul.offender === 'red')) match.fouls.push({ offender: foul.offender, major: foul.major === true, at: Number(foul.at) || 0 });
+  }
   match.holdReason = state.holdReason === 'start' || state.holdReason === 'pause' ? state.holdReason : null;
   match.solo.length = 0;
   for (const points of Array.isArray(state.solo) ? state.solo : []) match.solo.push(Number(points) || 0);

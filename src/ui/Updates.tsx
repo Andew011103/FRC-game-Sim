@@ -3,6 +3,45 @@ import { useGame } from './store';
 /** What changed in each update, newest first. Add a new entry at the top. */
 const UPDATES: { title: string; changes: string[] }[] = [
   {
+    title: 'Leaderboards',
+    changes: [
+      'Leaderboards for every official robot and a Season Overall board, ranking each signed-in player by their best timed singleplayer score this season.',
+      'A first top-3 place on the Season Overall board earns 15, 12 or 10 Ranking Points, once a season.',
+      'First place on some robots’ boards wears an exclusive champion skin, for as long as they stay first.',
+      'A countdown to the end of the season on the Drive Pass and the Season Overall board.',
+      'Your five best leaderboard places show on your player record.',
+      'Names in room chat show their Drive Pass colour and badge.',
+      'Fuel scores by the hub’s state as it comes out, so a shot just before a hub turns on counts. Hubs take about half a second to process fuel.',
+      'Fuel comes out of the back of the hub about 3 feet up, spread out a little.',
+      'Hoppers can be open on top: fuel falling onto them drops straight in. Only robots with one are fouled for taking fuel from the hub before it lands.',
+      'Speed presets: keys 1, 2 and 3 hold driving to 25%, 50% and 75% of top speed; press again for full speed. Change the percentages in Settings.',
+      'LED strips and structures can be turned any way: about the up axis, tilted and rolled.',
+      'See-through structures, only for looks, can be added to any robot. They and LED strips count as decorations (up to 12), not toward the 8 subsystems.',
+      'Game piece effects: fuel you shoot can glow, pulse, blink, run through the rainbow, trail flames, a comet streak or sparkles, crackle with electricity, or have two lights orbit it. Unlock them in the Drive Pass, or get one with a skin.',
+      'Pick your game piece effect in the robot selector. A skin that comes with its own effect shows it on a flying fuel ball above the robot instead. Turn every fuel effect off, yours and everyone else’s, in Settings.',
+      'Your own player page, from the button with your name at the top right of the main menu, now also lists the skins, game piece effects, name colours and badges you own, to equip or take off.',
+      'The Drive Pass has its own button at the top right of the main menu.',
+      'Each game piece effect has three separate strengths: how much of its colour the fuel takes on, how bright its glow is, and how strong its trail or sparks are.',
+    ],
+  },
+  {
+    title: 'Drive Pass and LED strips',
+    changes: [
+      'The Drive Pass: earn Ranking Points by playing, and unlock robot skins, name colours, name badges, LED effects and colour themes.',
+      'Equip rewards on the Drive Pass screen. Skins can also be picked in the robot selector. Other players see your skin, name colour and badge.',
+      'A new LED strip mechanism lights up in its own colour and pattern for idling, shooting, shooting on the move, passing, climbing and blocking.',
+      'LED effects: chase (a light with a fading tail running along), bounce (a blip bouncing end to end) and blink (two quick flashes). The steady on and off pattern is now called flash.',
+      'Skins can now add see-through structures and lights, not just recolour, and every player sees them.',
+      'Ranking Points: 3 for a multiplayer win, 1 for a tie, 1 for each bonus your alliance earns, and 1 for a timed singleplayer match. The results show what a match earned.',
+      'Energized now needs 630 fuel and Supercharged 1000; Traversal stays at 50 tower points.',
+      'Fouls are added to the score only when the match ends. A brief note shows when one is called.',
+      'The Drive Pass runs in seasons: each starts everyone from zero Ranking Points, and rewards unlocked earlier stay yours (except name badges).',
+      'Name badges can be pictures as well as letters or emoji.',
+      'Builder: a Duplicate button makes an identical copy of any part.',
+      'Hoppers can have chamfered or rounded corners, like the frame.',
+    ],
+  },
+  {
     title: 'Multiplayer rooms, and match day details',
     changes: [
       'Rooms have six driver stations: drag players between them, or to watching. Each station is its own driver camera spot.',
@@ -19,6 +58,7 @@ const UPDATES: { title: string; changes: string[] }[] = [
       'Each outpost starts the match with its 24 fuel inside, and takes fuel in five a second.',
       'Fuel grips the carpet more and stops rolling much sooner.',
       'Builder: a round frame option, with one ring of bumper, to go with drum hoppers.',
+      'Builder: any corner of the frame can be chamfered or rounded, each by its own amount. The bumpers, wheels and collisions follow the shape.',
       'Shooters can have an aim delay: a wait once lined up before the first shot.',
       'In a match, the host can end it for everyone from the menu; nobody else can go back to the room until it ends.',
       'Joining a match in progress clearly shows you are watching, and the camera key steps through views of every robot.',

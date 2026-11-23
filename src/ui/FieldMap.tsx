@@ -1,3 +1,4 @@
+import { bumperOutline, hasShapedCorners } from '../robots/outline';
 import { useEffect, useRef } from 'react';
 import { robotStart } from '../games/start';
 import type { Alliance, BoxElement, GameDefinition } from '../games/types';
@@ -30,8 +31,10 @@ function outlinePoints(robot: RobotDefinition, pose: StartPose, sx: (x: number) 
   const cos = Math.cos(pose.yaw);
   const sin = Math.sin(pose.yaw);
   const point = (lx: number, lz: number) => `${sx(pose.x + lx * cos + lz * sin)},${sy(pose.z - lx * sin + lz * cos)}`;
-  // A round robot is drawn as a circle.
-  const corners = robot.chassis.round
+  // A round robot is drawn as a circle, and one with cut corners as its bumper outline.
+  const corners = hasShapedCorners(robot.chassis)
+    ? bumperOutline(robot.chassis).map((p) => point(p.x, p.z))
+    : robot.chassis.round
     ? Array.from({ length: 24 }, (_, i) => point(halfX * Math.cos((i * Math.PI) / 12), halfX * Math.sin((i * Math.PI) / 12)))
     : [point(halfX, -halfZ), point(halfX, halfZ), point(-halfX, halfZ), point(-halfX, -halfZ)];
   return {

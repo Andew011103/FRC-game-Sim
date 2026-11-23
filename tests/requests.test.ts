@@ -189,3 +189,165 @@ describe('round frames, aim delay and ending a match', () => {
     sim.dispose();
   });
 });
+
+describe('speed presets', () => {
+  beforeAll(() => initPhysics());
+
+  it('a preset holds the robot to its share of top speed', () => {
+    const top = (share: number) => {
+      const sim = new SimWorld(testField());
+      const robot = sim.addRobot(testRobot('swerve-shooter'));
+      run(sim, input({ driveY: share }), 2);
+      const speed = robot.speed();
+      sim.dispose();
+      return speed;
+    };
+    const full = top(1);
+    expect(top(0.25) / full).toBeGreaterThan(0.2);
+    expect(top(0.25) / full).toBeLessThan(0.3);
+    expect(top(0.5) / full).toBeCloseTo(0.5, 1);
+  });
+
+  it('keeps three presets between 5% and 100%, starting at 25, 50 and 75', async () => {
+    const { readSettings } = await import('../src/settings');
+    expect(readSettings({}).speedPresets).toEqual([25, 50, 75]);
+    expect(readSettings({ speedPresets: [0, 63.4, 400] }).speedPresets).toEqual([5, 63, 100]);
+    expect(readSettings({}).keys.speed1).toBe('Digit1');
+  });
+});
+
+describe('turned parts, decorations and game piece effects', () => {
+  beforeAll(() => initPhysics());
+
+  it('turns points the same way as its quaternion', async () => {
+    const { turnPoint, turnQuat } = await import('../src/sim/subsystems/types');
+    const turn = { yaw: 30, pitch: -50, roll: 75 };
+    const p = { x: 0.3, y: -0.2, z: 0.5 };
+    const q = turnQuat(turn);
+    // q p q*, written out.
+    const t = { x: 2 * (q.y * p.z - q.z * p.y), y: 2 * (q.z * p.x - q.x * p.z), z: 2 * (q.x * p.y - q.y * p.x) };
+    const expected = {
+      x: p.x + q.w * t.x + (q.y * t.z - q.z * t.y),
+      y: p.y + q.w * t.y + (q.z * t.x - q.x * t.z),
+      z: p.z + q.w * t.z + (q.x * t.y - q.y * t.x),
+    };
+    const turned = turnPoint(p, turn);
+    expect(turned.x).toBeCloseTo(expected.x, 6);
+    expect(turned.y).toBeCloseTo(expected.y, 6);
+    expect(turned.z).toBeCloseTo(expected.z, 6);
+    // A quarter turn about the up axis takes the front to the left (-z), as the renderer draws it.
+    const quarter = turnPoint({ x: 1, y: 0, z: 0 }, { yaw: 90, pitch: 0, roll: 0 });
+    expect(quarter.z).toBeCloseTo(-1, 6);
+  });
+
+  it('a turned LED strip has its segments along the turned line, each turned with it', () => {
+    const def = sanitizeRobot({
+      chassis: {},
+      drivetrain: { type: 'swerve' },
+      subsystems: [{ type: 'led', sizeX: 0.4, sizeZ: 0.03, sizeY: 0.03, bottom: 0.4, pitch: 90 }],
+    })!;
+    const sim = new SimWorld(testField());
+    const robot = sim.addRobot(def);
+    const parts = robot.subsystems[0].parts;
+    expect(parts.length).toBe(10);
+    // Tilted straight up: the strip stands upright, so its ends differ in height, not in x.
+    expect(Math.abs(parts[0].position.x - parts.at(-1)!.position.x)).toBeLessThan(0.001);
+    expect(Math.abs(parts[0].position.y - parts.at(-1)!.position.y)).toBeCloseTo(0.36, 3);
+    expect(parts[0].pitch).toBeCloseTo(Math.PI / 2);
+    sim.dispose();
+  });
+
+  it('LED strips and see-through structures do not count toward the subsystem limit', async () => {
+    const { MAX_SUBSYSTEMS, MAX_DECORATIONS } = await import('../src/robots/spec');
+    const def = sanitizeRobot({
+      chassis: {},
+      drivetrain: { type: 'swerve' },
+      subsystems: [
+        ...Array.from({ length: MAX_SUBSYSTEMS + 2 }, () => ({ type: 'structure' })),
+        ...Array.from({ length: MAX_DECORATIONS + 3 }, (_, i) => (i % 2 ? { type: 'led' } : { type: 'structure', solid: false })),
+      ],
+    })!;
+    expect(def.subsystems.filter((part) => part.solid === true).length).toBe(MAX_SUBSYSTEMS);
+    expect(def.subsystems.length).toBe(MAX_SUBSYSTEMS + MAX_DECORATIONS);
+  });
+
+  it('a see-through structure is not felt by the field, so it does not stop a robot fitting under the trench', async () => {
+    const { robotHeight } = await import('../src/robots/stats');
+    const tall = (solid: boolean) =>
+      sanitizeRobot({ chassis: {}, drivetrain: { type: 'swerve' }, subsystems: [{ type: 'structure', bottom: 0.3, sizeY: 1.2, solid }] })!;
+    expect(robotHeight(tall(true))).toBeGreaterThan(1.4);
+    expect(robotHeight(tall(false))).toBeLessThan(0.5);
+    // Laid on its side, a tall structure is no longer tall.
+    const lying = sanitizeRobot({
+      chassis: {},
+      drivetrain: { type: 'swerve' },
+      subsystems: [{ type: 'structure', bottom: 0.3, sizeX: 0.1, sizeZ: 0.1, sizeY: 1, pitch: 90 }],
+    })!;
+    expect(robotHeight(lying)).toBeLessThan(0.95);
+  });
+
+  it('a shot piece is marked with its shooter until it lands, and the mark reaches other players', async () => {
+    const { SnapshotReader, SnapshotWriter } = await import('../src/net/snapshot');
+    const pieces: PieceGroup[] = [{ shape: 'ball', radius: 0.075, mass: 0.2, color: '#ffffff', positions: [[4, 3]] }];
+    const def = sanitizeRobot({
+      chassis: {},
+      drivetrain: { type: 'swerve' },
+      subsystems: [{ type: 'hopper', capacity: 5 }, { type: 'shooter', speed: 8, spread: 0, pitch: 60 }],
+    })!;
+    const field = testField({ pieces, targets: [{ alliance: 'blue', position: [6, 1, 0] }] });
+    const host = new SimWorld(field);
+    const copy = new SimWorld(field);
+    const robot = host.addRobot(def);
+    copy.addRobot(def);
+    robot.autoAim = false;
+    robot.store(host, 0);
+    run(host, input(), 0.3);
+    const writer = new SnapshotWriter();
+    const reader = new SnapshotReader();
+    let flying = false;
+    let copied = false;
+    run(host, input({ shoot: true }), 0.4, () => {
+      reader.apply(copy, writer.write(host, 1));
+      if (host.pieces.launchedBy[0] === 0) flying = true;
+      if (copy.pieces.launchedBy[0] === 0 && copy.pieces.heldBy[0] === -1) copied = true;
+    });
+    expect(flying).toBe(true);
+    expect(copied).toBe(true);
+    run(host, input(), 3);
+    reader.apply(copy, writer.write(host, 2));
+    expect(host.pieces.launchedBy[0]).toBe(-1);
+    expect(copy.pieces.launchedBy[0]).toBe(-1);
+    host.dispose();
+    copy.dispose();
+  });
+
+  it("a skin's game piece effect comes before the one a player equipped", async () => {
+    const { dressRobot, PASS } = await import('../src/pass/pass');
+    const { cleanEffect } = await import('../src/pass/effects');
+    expect(cleanEffect({ kind: 'flame', color: '#ff0000' })).toEqual({ kind: 'flame', color: '#ff0000' });
+    expect(cleanEffect({ kind: 'flame', color: 'red' })).toEqual({ kind: 'flame', color: 'alliance' });
+    expect(cleanEffect({ kind: 'explode' })).toBeUndefined();
+    // Fuel colour, glow and intensity are three separate strengths, each kept in its range; ones at their start are left out.
+    expect(cleanEffect({ kind: 'comet', color: '#00ff00', fuelColor: 0.2, glow: 1.5, intensity: 0.433 })).toEqual({
+      kind: 'comet',
+      color: '#00ff00',
+      fuelColor: 0.2,
+      glow: 1.5,
+      intensity: 0.43,
+    });
+    expect(cleanEffect({ kind: 'comet', color: '#00ff00', fuelColor: 4, glow: -1, intensity: 9 })).toEqual({ kind: 'comet', color: '#00ff00', fuelColor: 1, glow: 0, intensity: 2 });
+    expect(cleanEffect({ kind: 'comet', color: '#00ff00', fuelColor: 0.3, glow: 1, intensity: 1 })).toEqual({ kind: 'comet', color: '#00ff00' });
+    const { effectScales } = await import('../src/pass/effects');
+    expect(effectScales({ kind: 'glow', color: '#ff0000' })).toEqual({ fuelColor: 0.3, glow: 1, intensity: 1 });
+    const { readSettings } = await import('../src/settings');
+    expect(readSettings({}).showPieceEffects).toBe(true);
+    expect(readSettings({ showPieceEffects: false }).showPieceEffects).toBe(false);
+    const robot = testRobot('swerve-shooter');
+    // An effect id that is not in the pass does nothing.
+    expect(dressRobot(robot, null, 'no-such-effect').pieceEffect).toBeUndefined();
+    const reward = [...PASS.tiers.map((tier) => tier.reward), ...PASS.champions].find((r) => r.type === 'pieceEffect');
+    if (reward) expect(dressRobot(robot, null, reward.id).pieceEffect).toBeDefined();
+    // Custom robots never carry an effect of their own.
+    expect(sanitizeRobot({ chassis: {}, drivetrain: { type: 'swerve' }, subsystems: [], pieceEffect: { kind: 'glow', color: '#ffffff' } })!.pieceEffect).toBeUndefined();
+  });
+});

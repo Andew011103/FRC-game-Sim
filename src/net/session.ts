@@ -12,6 +12,7 @@ import {
   MAX_IN_ROOM,
   MAX_PER_ALLIANCE,
   PROTOCOL,
+  RIGHTS_NOTES,
   SNAPSHOT_EVERY,
   buildNetWorld,
   cleanAccount,
@@ -19,6 +20,7 @@ import {
   cleanPose,
   cleanSeat,
   decodeInput,
+  cleanLook,
   encodeInput,
   mayChangeRobot,
   playerFromWire,
@@ -85,6 +87,8 @@ export class HostSession {
   onPose: ((id: number, pose: Pose | null) => void) | null = null;
   /** Players from before the host changed who have not reconnected yet, by id, with the time they have left. */
   private readonly expected = new Map<number, number>();
+  /** Players the host has just removed, so their leaving is noted as that. */
+  private readonly removed = new Set<number>();
   private readonly peers: Peer[] = [];
   private readonly writer = new SnapshotWriter();
   private nextId: number;
@@ -93,7 +97,7 @@ export class HostSession {
   private finishedSent = false;
   private clock = 0;
 
-  constructor(name: string, robot: RobotDefinition, accountId?: string, carry?: RoomCarryOver & { myId: number }) {
+  constructor(name: string, robot: RobotDefinition, accountId?: string, carry?: RoomCarryOver & { myId: number; oldHost?: string }) {
     if (carry) {
       // Taking over a room: everyone else in it is given a little while to reconnect.
       this.myId = carry.myId;
@@ -108,6 +112,13 @@ export class HostSession {
       for (const player of this.players) if (player.id !== this.myId) this.expected.set(player.id, REJOIN_SECONDS);
       this.finishedSent = carry.sim?.match?.finished ?? false;
       this.writer.requestFull();
+      const me = this.players.find((player) => player.id === this.myId);
+      const oldHost = carry.oldHost;
+      this.chat = [
+        ...this.chat,
+        ...(oldHost ? [{ from: -1, name: 'Room', text: `${oldHost} left the room.`, system: true }] : []),
+        { from: -1, name: 'Room', text: `${me?.name ?? 'Another player'} is now the host.`, system: true },
+      ].slice(-CHAT_KEEP);
     } else {
       this.myId = 0;
       this.players = [
@@ -165,6 +176,8 @@ export class HostSession {
       if (!peer.player) return;
       const at = this.players.indexOf(peer.player);
       if (at !== -1) this.players.splice(at, 1);
+      const removed = this.removed.delete(peer.player.id);
+      this.note(removed ? `${peer.player.name} was removed from the room by the host.` : `${peer.player.name} left the room.`);
       this.roomChanged();
     };
   }
@@ -184,6 +197,7 @@ export class HostSession {
       this.expected.delete(back);
       peer.player = this.players.find((player) => player.id === back) ?? null;
     }
+    const returning = peer.player !== null;
     if (!peer.player) {
       if (this.players.length >= MAX_IN_ROOM) return refuse('The room is full.');
       // A player who arrives during a match watches it, and can take a seat once it is over.
@@ -198,7 +212,12 @@ export class HostSession {
       this.players.push(peer.player);
     }
     this.send(peer, { type: 'welcome', id: peer.player.id });
-    this.send(peer, { type: 'chat', lines: this.chat });
+    this.send(peer, { type: 'chat', lines: this.chat, all: true });
+    if (!returning) {
+      this.note(
+        peer.player.seat ? `${peer.player.name} joined the room.` : `${peer.player.name} joined the room and is watching.`,
+      );
+    }
     // Someone arriving during a match is sent it to watch. A match that is already over is not theirs to see:
     // it would put them straight onto its results, and onto their record.
     if (this.playing && this.setup && message.match !== this.setup.seed) this.send(peer, { type: 'start', setup: this.wireSetup(this.setup) });
@@ -242,8 +261,8 @@ export class HostSession {
       this.addChat({ from: actorId, name: actor.name, text });
       return;
     }
-    const target = this.players.find((player) => player.id === message.id);
-    if (!target || (!isHost && message.id !== actorId && message.type !== 'robot')) return;
+    const target = this.players.find((player) => player.id === (message.type === 'look' ? actorId : message.id));
+    if (!target || (message.type !== 'look' && !isHost && message.id !== actorId && message.type !== 'robot')) return;
 
     if (message.type === 'seat') {
       const seat = cleanSeat(message.seat);
@@ -262,6 +281,10 @@ export class HostSession {
       target.pose = cleanPose(message.pose);
       this.broadcast({ type: 'pose', id: target.id, pose: target.pose });
       this.onPose?.(target.id, target.pose);
+    } else if (message.type === 'look') {
+      if (target.id !== actorId) return;
+      target.look = cleanLook(message.look);
+      this.roomChanged();
     } else if (message.type === 'robot') {
       if (!this.canChangeRobot(actorId, target.id)) return;
       const robot = robotFromWire(message.robot);
@@ -282,14 +305,27 @@ export class HostSession {
 
   /** Host only: changes the room's settings. */
   setSettings(change: Partial<RoomSettings>): void {
+    const before = this.settings;
     this.settings = { ...this.settings, ...change };
+    const after = this.settings;
+    if (after.robotRights !== before.robotRights) this.note(`The host changed the room so ${RIGHTS_NOTES[after.robotRights]}.`);
+    if (after.mode !== before.mode) this.note(`The host set the match to ${after.mode === 'match' ? 'a timed match' : 'free practice, with no clock'}.`);
+    if (after.listed !== before.listed) {
+      this.note(after.listed ? 'The host listed the room in the open matches.' : 'The host took the room off the open matches list.');
+    }
     this.roomChanged();
+  }
+
+  /** A note from the room itself in the chat, in its own colour. */
+  private note(text: string): void {
+    this.addChat({ from: -1, name: 'Room', text, system: true });
   }
 
   /** Host only: sends a player out of the room. */
   kick(id: number): void {
     const peer = this.peers.find((other) => other.player?.id === id);
     if (!peer || id === this.myId) return;
+    this.removed.add(id);
     this.send(peer, { type: 'kicked' });
     peer.transport.close();
   }
@@ -357,7 +393,10 @@ export class HostSession {
       }
       this.expected.delete(id);
       const at = this.players.findIndex((player) => player.id === id);
-      if (at !== -1) this.players.splice(at, 1);
+      if (at !== -1) {
+        this.note(`${this.players[at].name} left the room.`);
+        this.players.splice(at, 1);
+      }
       this.roomChanged();
     }
     const { sim, setup } = this;
@@ -504,12 +543,14 @@ export class ClientSession {
       this.room = { ...message.room, players, settings: { ...DEFAULT_ROOM_SETTINGS, ...message.room.settings } };
       this.onRoom?.(this.room);
     } else if (message.type === 'chat') {
-      const lines = (Array.isArray(message.lines) ? message.lines : []).map((line) => ({
+      const lines: ChatLine[] = (Array.isArray(message.lines) ? message.lines : []).map((line) => ({
         from: Number(line.from),
         name: cleanName(line.name),
         text: String(line.text ?? '').slice(0, CHAT_LENGTH),
+        ...(line.system === true ? { system: true } : {}),
       }));
-      this.chat = [...this.chat, ...lines].slice(-CHAT_KEEP);
+      // The whole chat, sent on joining, replaces what this player had, so nothing shows twice after the host changes.
+      this.chat = (message.all ? lines : [...this.chat, ...lines]).slice(-CHAT_KEEP);
       this.onChat?.(lines);
     } else if (message.type === 'pose') {
       const player = this.room?.players.find((other) => other.id === message.id);

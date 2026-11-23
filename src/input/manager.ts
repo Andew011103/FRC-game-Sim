@@ -7,6 +7,9 @@ const ACTIONS: Partial<Record<Control, InputAction>> = {
   camera: 'cycleCamera',
   reset: 'reset',
   pause: 'pause',
+  speed1: 'speed1',
+  speed2: 'speed2',
+  speed3: 'speed3',
 };
 const DEADBAND = 0.1;
 

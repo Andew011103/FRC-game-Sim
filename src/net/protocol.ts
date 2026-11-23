@@ -1,5 +1,6 @@
 import { configuredGame } from '../games';
 import { robotStart } from '../games/start';
+import { dressRobot } from '../pass/pass';
 import type { Alliance } from '../games/types';
 import { NEUTRAL_INPUT, type DriverInput } from '../input/types';
 import { OFFICIAL_ROBOTS } from '../robots';
@@ -19,7 +20,7 @@ import type { MatchState } from './snapshot';
 // code and everyone else reconnects to them.
 
 /** Raised whenever the messages change, so mismatched versions refuse each other. */
-export const PROTOCOL = 3;
+export const PROTOCOL = 5;
 export const MAX_PER_ALLIANCE = 3;
 /** Robots on the field at once: three a side. */
 export const MAX_PLAYERS = MAX_PER_ALLIANCE * 2;
@@ -92,13 +93,45 @@ export interface PlayerInfo {
   pose: Pose | null;
   /** The player's account, if they are signed in, so others can look up their record. */
   accountId?: string;
+  /** Drive Pass cosmetics the player has on. */
+  look?: Look;
+}
+
+/** A player's Drive Pass cosmetics, by reward id: the skin on each robot, their name colour and their badge. */
+export interface Look {
+  skins: Record<string, string>;
+  nameColor: string;
+  badge: string;
+  /** The game piece effect equipped. */
+  pieceEffect?: string;
+}
+
+/** Cosmetics from another player, kept to short ids. They are only ever looked up in this game's own pass. */
+export function cleanLook(value: unknown): Look | undefined {
+  const look = value as Partial<Look> | null;
+  if (!look || typeof look !== 'object') return undefined;
+  const id = (text: unknown) => (typeof text === 'string' && text.length <= 80 ? text : '');
+  const skins: Record<string, string> = {};
+  for (const [robot, skin] of Object.entries(look.skins ?? {}).slice(0, 100)) {
+    if (id(robot) && id(skin)) skins[robot] = skin as string;
+  }
+  return { skins, nameColor: id(look.nameColor), badge: id(look.badge), pieceEffect: id(look.pieceEffect) };
 }
 
 export interface ChatLine {
   from: number;
   name: string;
   text: string;
+  /** A note from the room itself: someone joining or leaving, or the host changing a setting. */
+  system?: boolean;
 }
+
+/** How each choice of who picks robots reads in the room's notes. */
+export const RIGHTS_NOTES: Record<RobotRights, string> = {
+  host: 'only the host picks robots',
+  captain: 'player 1 of each alliance picks robots for their alliance',
+  everyone: 'everyone picks their own robot',
+};
 
 /** The room as everyone sees it. Players are in the order they joined, which is also who takes over from the host. */
 export interface RoomState {
@@ -171,6 +204,7 @@ export function playerFromWire(value: unknown): PlayerInfo | null {
     seat: cleanSeat(player.seat),
     pose: cleanPose(player.pose),
     accountId: cleanAccount(player.accountId),
+    look: cleanLook(player.look),
   };
 }
 
@@ -191,7 +225,9 @@ export type ClientMessage =
   | { type: 'seat'; id: number; seat: Seat | null }
   | { type: 'pose'; id: number; pose: Pose | null }
   | { type: 'robot'; id: number; robot: RobotWire }
-  | { type: 'chat'; text: string };
+  | { type: 'chat'; text: string }
+  /** The player's Drive Pass cosmetics, sent on joining and whenever they change. */
+  | { type: 'look'; look: Look };
 
 /** A driver's choices that change how the host drives their robot. */
 export interface DriverPrefs {
@@ -206,7 +242,8 @@ export type HostMessage =
   | { type: 'refused'; reason: string }
   | { type: 'room'; room: Omit<RoomState, 'players'> & { players: WirePlayer[] } }
   | { type: 'pose'; id: number; pose: Pose | null }
-  | { type: 'chat'; lines: ChatLine[] }
+  /** New chat lines, or with `all` the room's whole chat, which replaces what the player has. */
+  | { type: 'chat'; lines: ChatLine[]; all?: boolean }
   | { type: 'start'; setup: Omit<MatchSetup, 'players'> & { players: WirePlayer[] } }
   | { type: 'match'; state: MatchState }
   | { type: 'kicked' }
@@ -260,7 +297,9 @@ export function buildNetWorld(setup: MatchSetup): SimWorld {
   for (const player of setup.players) {
     const { alliance, station } = player.seat;
     const spawnIndex = Math.max(0, game.spawns.findIndex((spawn) => spawn.alliance === alliance));
-    sim.addRobot(player.robot, spawnIndex, robotStart(game, player.robot, alliance, player.pose, station));
+    // Each robot wears the skin its player has on it.
+    const robot = dressRobot(player.robot, player.look?.skins[player.robot.id], player.look?.pieceEffect);
+    sim.addRobot(robot, spawnIndex, robotStart(game, robot, alliance, player.pose, station));
   }
   return sim;
 }

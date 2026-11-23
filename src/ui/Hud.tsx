@@ -22,6 +22,7 @@ const HINTS: { controls: Control[]; label: string; stick?: string; needs?: strin
   { controls: ['fieldCentric'], label: 'Control mode' },
   { controls: ['camera'], label: 'Camera' },
   { controls: ['reset'], label: 'Reset field' },
+  { controls: ['speed1', 'speed2', 'speed3'], label: 'Speed presets' },
   { controls: ['pause'], label: 'Pause' },
 ];
 
@@ -52,6 +53,8 @@ export function Hud() {
   return (
     <div className="hud">
       <Countdown />
+      <FoulPopup />
+      <SpeedCap />
       <div className="hud-bottom-left">
         {telemetry.climbLevel > 0 && <div className="panel hud-climb">Tower level {telemetry.climbLevel}</div>}
         {telemetry.capacity > 0 && (
@@ -149,6 +152,7 @@ function WatchingHud() {
   return (
     <div className="hud">
       <Countdown />
+      <FoulPopup />
       <div className="panel hud-watching">
         <strong>Watching this match</strong>
         <span>You can take a driver station in the room once it is over.</span>
@@ -159,4 +163,24 @@ function WatchingHud() {
       </div>
     </div>
   );
+}
+
+/** A brief, quiet note when a foul is called. Its points go to the other alliance when the match ends. */
+function FoulPopup() {
+  const foul = useGame((state) => state.match?.foul ?? null);
+  if (!foul) return null;
+  return (
+    <div className={`foul-popup ${foul.offender}`} key={`${foul.offender}-${foul.at}`} role="status">
+      {foul.major ? 'Major Foul' : 'Minor Foul'}
+      <span className="muted"> {foul.offender === 'blue' ? 'Blue' : 'Red'} · {foul.major ? 15 : 5}</span>
+    </div>
+  );
+}
+
+/** Shown while a speed preset holds driving below full speed. */
+function SpeedCap() {
+  const preset = useGame((state) => state.speedPreset);
+  const presets = useGame((state) => state.settings.speedPresets);
+  if (preset === null) return null;
+  return <div className="panel hud-speed-cap">Speed {presets[preset]}%</div>;
 }

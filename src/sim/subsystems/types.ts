@@ -66,18 +66,81 @@ export function shapeFields(color: string): FieldSpec[] {
   ];
 }
 
+/** How a part is turned, in degrees: about the up axis, then tipped front up, then rolled about its length. */
+export interface Turn {
+  yaw: number;
+  pitch: number;
+  roll: number;
+}
+
+/** Fields that turn a part any way at all, for parts that only sit there (lights, structures). */
+export function turnFields(): FieldSpec[] {
+  const group = 'shape' as const;
+  const angle = { kind: 'number' as const, default: 0, min: -180, max: 180, step: 1, unit: '°', group };
+  return [
+    { key: 'yaw', label: 'Turn (about the up axis)', ...angle },
+    { key: 'pitch', label: 'Tilt (front up or down)', ...angle },
+    { key: 'roll', label: 'Roll (side up or down)', ...angle },
+  ];
+}
+
+const RAD = Math.PI / 180;
+
+/** A point in a part's own space, turned the way the part is (yaw, then pitch, then roll, as the renderer draws it). */
+export function turnPoint(p: Vec3, turn: Turn): Vec3 {
+  const [y, z, x] = [turn.yaw * RAD, turn.pitch * RAD, turn.roll * RAD];
+  // Roll about x, then pitch about z, then yaw about y.
+  const a = v3(p.x, p.y * Math.cos(x) - p.z * Math.sin(x), p.y * Math.sin(x) + p.z * Math.cos(x));
+  const b = v3(a.x * Math.cos(z) - a.y * Math.sin(z), a.x * Math.sin(z) + a.y * Math.cos(z), a.z);
+  return v3(b.x * Math.cos(y) + b.z * Math.sin(y), b.y, -b.x * Math.sin(y) + b.z * Math.cos(y));
+}
+
+/** The same turn as a quaternion, for physics. */
+export function turnQuat(turn: Turn): { x: number; y: number; z: number; w: number } {
+  type Q = [number, number, number, number];
+  const mul = (a: Q, b: Q): Q => [
+    a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+  ];
+  const half = (deg: number) => (deg * RAD) / 2;
+  const qy: Q = [0, Math.sin(half(turn.yaw)), 0, Math.cos(half(turn.yaw))];
+  const qz: Q = [0, 0, Math.sin(half(turn.pitch)), Math.cos(half(turn.pitch))];
+  const qx: Q = [Math.sin(half(turn.roll)), 0, 0, Math.cos(half(turn.roll))];
+  const [x, y, z, w] = mul(mul(qy, qz), qx);
+  return { x, y, z, w };
+}
+
+/** How far a turned box reaches above (and below) its centre. */
+export function turnedHalfHeight(size: [number, number, number], turn: Turn): number {
+  return (
+    Math.abs(turnPoint(v3(size[0] / 2, 0, 0), turn).y) +
+    Math.abs(turnPoint(v3(0, size[1] / 2, 0), turn).y) +
+    Math.abs(turnPoint(v3(0, 0, size[2] / 2), turn).y)
+  );
+}
+
 /** A box the renderer draws for a subsystem. The subsystem moves and shows or hides it. */
 export interface PartView {
   /** A box, or an upright drum whose two diameters are the first and last sizes. */
   shape?: 'box' | 'cylinder';
+  /**
+   * A box with its corners cut: its outline seen from above, scaled to a box
+   * of size 1, so it stretches with the part's size like any box.
+   */
+  outline?: { x: number; z: number }[];
+  /** Lights: drawn glowing in their colour, which can change from moment to moment. */
+  glow?: boolean;
   size: [number, number, number];
   color: string;
   opacity?: number;
   /** Centre, in the robot's own space. */
   position: Vec3;
-  /** Radians: yaw about the robot's up axis, then pitch upward. */
+  /** Radians: yaw about the robot's up axis, then pitch upward, then roll about the part's own length. */
   yaw: number;
   pitch: number;
+  roll?: number;
   visible: boolean;
 }
 
@@ -104,6 +167,11 @@ export interface Subsystem {
    * Asked only while the shoot button is held.
    */
   chassisTurn?(ctx: SubsystemContext): number | null;
+  /** For hoppers: open on top, so fuel falling onto it drops straight in. */
+  readonly openTop?: boolean;
+  /** For shooters: whether it is firing right now, and whether at a spot to pass to rather than its goal. */
+  readonly shooting?: boolean;
+  readonly passing?: boolean;
   /** For climbers: the tower level currently reached, 0 when not climbing. */
   readonly climbLevel?: number;
 }

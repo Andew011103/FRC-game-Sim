@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 
 /**
  * Development only: lets the robot builder's "Save as official" button write
- * a robot straight into src/robots/builtin/, where the game picks it up.
+ * a robot straight into src/robots/builtin/, where the game picks it up, and
+ * the Drive Pass editor save the pass to src/pass/drive-pass.json.
  * It is not part of the published site.
  */
 export function officialRobots() {
@@ -26,6 +27,35 @@ export function officialRobots() {
             if (typeof robot.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,60}$/.test(robot.id)) throw new Error('bad id');
             const file = resolve(server.config.root, 'src/robots/builtin', `${robot.id}.json`);
             writeFileSync(file, `${JSON.stringify({ ...robot, official: true }, null, 2)}\n`);
+            response.statusCode = 200;
+            response.end('saved');
+          } catch {
+            response.statusCode = 400;
+            response.end('not saved');
+          }
+        });
+      });
+
+      // The Drive Pass screen's editor saves the whole road of rewards here.
+      server.middlewares.use('/__drive-pass', (request, response) => {
+        if (request.method !== 'POST') {
+          response.statusCode = 405;
+          response.end();
+          return;
+        }
+        let body = '';
+        request.on('data', (chunk) => (body += chunk));
+        request.on('end', () => {
+          try {
+            const pass = JSON.parse(body);
+            if (typeof pass.name !== 'string' || !Array.isArray(pass.tiers)) throw new Error('not a pass');
+            for (const tier of pass.tiers) {
+              if (typeof tier.rp !== 'number' || typeof tier.reward?.id !== 'string' || typeof tier.reward?.type !== 'string') {
+                throw new Error('bad tier');
+              }
+            }
+            const file = resolve(server.config.root, 'src/pass/drive-pass.json');
+            writeFileSync(file, `${JSON.stringify(pass, null, 2)}\n`);
             response.statusCode = 200;
             response.end('saved');
           } catch {

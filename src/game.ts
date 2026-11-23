@@ -1,5 +1,7 @@
 import { configuredGame } from './games';
 import { robotStart } from './games/start';
+import { dressRobot, wornSkin } from './pass/pass';
+import { rankable, submitRun } from './account/leaderboard';
 import type { Alliance, Bonus, GameDefinition, StatusInfo } from './games/types';
 import { InputManager } from './input/manager';
 import { NEUTRAL_INPUT, type DriverInput, type InputAction } from './input/types';
@@ -20,6 +22,8 @@ import { useGame, type AllianceView, type MatchResults, type MatchView } from '.
 const MAX_STEPS_PER_FRAME = 15;
 const MAX_FRAME_TIME = MAX_STEPS_PER_FRAME * SIM_DT;
 const LIVE_UPDATE_INTERVAL = 0.1;
+/** How long a foul's pop-up stays up. */
+const FOUL_POPUP_SECONDS = 2;
 /** Drawing this long behind means the browser has slowed the page, and the worker's clock takes over. */
 const STALLED_MS = 100;
 /** In auto quality, drop a level after this long below the target frame rate. */
@@ -39,6 +43,13 @@ export interface RobotWindow {
   alliance: Alliance;
   /** Whether the view circles the robot. */
   spin: boolean;
+}
+
+/** A box on the page showing a fuel ball flying with a game piece effect. */
+export interface EffectWindow {
+  elementId: string;
+  effect: NonNullable<RobotDefinition['pieceEffect']>;
+  alliance: Alliance;
 }
 
 /** The empty floor a displayed robot stands on, for one alliance's bumper colour. */
@@ -126,6 +137,11 @@ export class Game {
     for (const world of old) world.dispose();
   }
 
+  /** Sets the boxes on the page that show a game piece effect on a flying fuel ball. */
+  setEffectWindows(windows: EffectWindow[]): void {
+    this.view.setEffectWindows(windows);
+  }
+
   /** The colour of screens that show no field, so the 3D view matches the page around its boxes. */
   setBackground(color: string): void {
     this.view.setPlainColor(color);
@@ -165,11 +181,16 @@ export class Game {
    * the clock at the start, and the robot on its starting spot with its preload.
    */
   private buildMatch(): void {
-    const { gameId, gameOptions, startPose, mode, robotId, customRobots, alliance } = useGame.getState();
+    const { gameId, gameOptions, startPose, mode, robotId, customRobots, alliance, settings } = useGame.getState();
     const game = configuredGame(gameId, gameOptions[gameId]);
     const sim = new SimWorld(game, { mode, pauses: true });
     const spawnIndex = Math.max(0, game.spawns.findIndex((spawn) => spawn.alliance === alliance));
-    const robot = findRobot(robotId, customRobots);
+    // The robot wears the skin the player picked for it, if any.
+    const robot = dressRobot(
+      findRobot(robotId, customRobots),
+      wornSkin(robotId, settings.skins, useGame.getState().champions),
+      settings.pieceEffect,
+    );
     const player = sim.addRobot(robot, spawnIndex, robotStart(game, robot, alliance, startPose));
     this.replaceWorld(sim, player);
     this.input.release();
@@ -229,10 +250,22 @@ export class Game {
         robot: this.player.def.name,
         single: !online,
         solo: online ? (this.sim.match.solo[this.player.index] ?? 0) : null,
+        bonusRp: online ? results.bonuses.filter((bonus) => bonus.achieved).length : 0,
         game: this.sim.game.id,
         official: this.player.def.official === true,
         players: this.sim.robots.length,
       });
+    }
+    const state = useGame.getState();
+    state.setLeaderboardNote(null);
+    if (!online && this.player && results.timed) {
+      const why = rankable(this.player.def, results.timed);
+      if (why) state.setLeaderboardNote(why);
+      else {
+        const robotId = this.player.def.id;
+        const score = results[this.player.alliance];
+        void submitRun(robotId, score).then((note) => useGame.getState().setLeaderboardNote(note ?? `Your ${score} is on the ${this.player?.def.name ?? ''} leaderboard.`));
+      }
     }
     const { screen, showResults, setResults } = useGame.getState();
     // A player looking at another screen, such as the room, is not pulled away from it.
@@ -288,10 +321,17 @@ export class Game {
     const { settings, screen } = state;
     const driverInput = this.input.read(this.player?.climbing ?? false);
     if (settings.constantIntake) driverInput.intake = true;
+    // A speed preset holds driving (not turning) to its share of top speed.
+    if (state.speedPreset !== null) {
+      const share = (settings.speedPresets[state.speedPreset] ?? 100) / 100;
+      driverInput.driveX *= share;
+      driverInput.driveY *= share;
+    }
     // In multiplayer the driver stands at their own station; otherwise where the settings say.
     this.view.setDriverStation(this.netStation ?? settings.driverStation);
     const quality = this.chooseQuality(settings.quality, screen === 'playing' && visible, delta);
     this.view.setQuality(quality);
+    this.view.setPieceEffects(settings.showPieceEffects);
 
     const simStart = performance.now();
     const previewing = state.screen === 'builder';
@@ -406,6 +446,7 @@ export class Game {
       hold: match.hold,
       holdReason: match.holdReason,
       previousPhase: match.phaseIndex > 0 ? match.phases[match.phaseIndex - 1].label : null,
+      foul: [...match.fouls].reverse().find((foul) => match.elapsed - foul.at < FOUL_POPUP_SECONDS) ?? null,
       stage: mine.stage ?? null,
       blue: side('blue'),
       red: side('red'),
@@ -424,6 +465,8 @@ export class Game {
         red: match.points.red[label] ?? 0,
       })),
       bonuses: bonuses ?? this.sim.rules!.bonuses(this.sim, this.player?.alliance ?? 'blue'),
+      alliance: this.player?.alliance ?? null,
+      timed: match.mode === 'match',
     };
   }
 
@@ -435,7 +478,11 @@ export class Game {
       return;
     }
     if (state.screen !== 'playing') return;
-    if (action === 'toggleFieldCentric') state.setFieldCentric(!state.fieldCentric);
+    if (action === 'speed1' || action === 'speed2' || action === 'speed3') {
+      // A preset key holds driving to that share of top speed; the same key again goes back to full speed.
+      const preset = Number(action.slice(-1)) - 1;
+      state.setSpeedPreset(state.speedPreset === preset ? null : preset);
+    } else if (action === 'toggleFieldCentric') state.setFieldCentric(!state.fieldCentric);
     else if (action === 'cycleCamera' && state.watching) this.nextWatchView();
     else if (action === 'cycleCamera') state.cycleCamera();
     // Resetting starts the whole field again, not just the robot. The camera and control mode stay as they are.

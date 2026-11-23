@@ -1,12 +1,14 @@
 import { multiplayer } from '../net/room';
 import { PlayerList } from './PlayerList';
-import { useGame } from './store';
+import { useGame, type MatchResults } from './store';
+import { matchRankingPoints } from '../pass/pass';
 
 /** Final score, the breakdown by category, and bonus progress. */
 export function Results({ onRestart }: { onRestart: () => void }) {
   const results = useGame((state) => state.results);
   const setScreen = useGame((state) => state.setScreen);
   const room = useGame((state) => state.room);
+  const leaderboardNote = useGame((state) => state.leaderboardNote);
   if (!results) return null;
 
   const outcome = results.blue > results.red ? 'Blue wins' : results.red > results.blue ? 'Red wins' : 'Tie';
@@ -52,6 +54,9 @@ export function Results({ onRestart }: { onRestart: () => void }) {
           ))}
         </ul>
 
+        <RankingPoints results={results} multiplayer={room !== null} />
+        {!room && leaderboardNote && <p className="hint">{leaderboardNote}</p>}
+
         {room && <PlayerList />}
         {room ? (
           <>
@@ -75,5 +80,25 @@ export function Results({ onRestart }: { onRestart: () => void }) {
         )}
       </div>
     </div>
+  );
+}
+
+/** The Drive Pass Ranking Points this match earned: one for each bonus above, three for a win, one for a tie. */
+function RankingPoints({ results, multiplayer }: { results: MatchResults; multiplayer: boolean }) {
+  if (!results.timed || !results.alliance) return null;
+  if (!multiplayer) return <p className="ranking-points">+1 Ranking Point for a timed match</p>;
+  const own = results[results.alliance];
+  const other = results[results.alliance === 'blue' ? 'red' : 'blue'];
+  const achieved = results.bonuses.filter((bonus) => bonus.achieved);
+  const total = matchRankingPoints(own, other, achieved.length);
+  const parts = [
+    ...(own > other ? ['3 for the win'] : own === other ? ['1 for the tie'] : []),
+    ...achieved.map((bonus) => `1 for ${bonus.label}`),
+  ];
+  return (
+    <p className="ranking-points">
+      +{total} Ranking {total === 1 ? 'Point' : 'Points'}
+      {parts.length > 0 && <span className="muted"> ({parts.join(', ')})</span>}
+    </p>
   );
 }

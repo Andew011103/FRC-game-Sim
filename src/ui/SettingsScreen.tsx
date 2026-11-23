@@ -11,6 +11,8 @@ import {
 } from '../settings';
 import { Dropdown, Slider } from './controls';
 import { useGame } from './store';
+import { useUnlocked } from './passHooks';
+import { passThemes } from '../pass/pass';
 
 const QUALITY_OPTIONS: { value: QualitySetting; label: string }[] = [
   { value: 'auto', label: 'Auto: starts high, lowers itself if slow' },
@@ -44,6 +46,9 @@ type Listening = { control: Control; device: 'keys' | 'pad' } | null;
 /** The player's preferences: look, sound, driving aids and controls. */
 export function SettingsScreen() {
   const settings = useGame((state) => state.settings);
+  const unlocked = useUnlocked();
+  // Drive Pass themes appear once unlocked.
+  const passThemeIds = new Set(Object.keys(passThemes()));
   const update = useGame((state) => state.updateSettings);
   const setScreen = useGame((state) => state.setScreen);
   const setCamera = useGame((state) => state.setCamera);
@@ -112,7 +117,9 @@ export function SettingsScreen() {
               <Dropdown
                 label="Colours"
                 value={settings.theme}
-                options={Object.entries(THEMES).map(([value, theme]) => ({ value, label: theme.name }))}
+                options={Object.entries(THEMES)
+                  .filter(([value]) => !passThemeIds.has(value) || unlocked.has(value) || value === settings.theme)
+                  .map(([value, theme]) => ({ value, label: theme.name }))}
                 onChange={(theme) => update({ theme })}
               />
             </div>
@@ -146,6 +153,14 @@ export function SettingsScreen() {
                 }}
               />
             </div>
+            <label className="field check">
+              <input
+                type="checkbox"
+                checked={settings.showPieceEffects}
+                onChange={(event) => update({ showPieceEffects: event.target.checked })}
+              />
+              <span>Show game piece effects (on your shots and everyone else's)</span>
+            </label>
             {HUD_OPTIONS.map(({ key, label }) => (
               <label className="field check" key={key}>
                 <input type="checkbox" checked={settings[key]} onChange={(event) => update({ [key]: event.target.checked })} />
@@ -225,6 +240,25 @@ export function SettingsScreen() {
               />
               <span>Intake switches on and off with a press, instead of being held</span>
             </label>
+          </div>
+          <h2>Speed presets</h2>
+          <p className="hint">
+            Keys {settings.speedPresets.map((_, i) => keyLabel(settings.keys[`speed${i + 1}` as 'speed1'])).join(', ')} hold driving to
+            these shares of top speed, the same for every robot; press the same key again for full speed. Slower driving makes
+            shooting on the move more accurate.
+          </p>
+          <div className="fields">
+            {settings.speedPresets.map((value, i) => (
+              <Slider
+                key={i}
+                label={`Preset ${i + 1}: ${value}%`}
+                value={value}
+                min={5}
+                max={100}
+                step={5}
+                onChange={(next) => update({ speedPresets: settings.speedPresets.map((other, k) => (k === i ? next : other)) })}
+              />
+            ))}
           </div>
         </section>
 

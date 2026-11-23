@@ -3,6 +3,7 @@ import type { RobotWindow } from '../game';
 import { configuredGame } from '../games';
 import type { Alliance } from '../games/types';
 import { findRobot } from '../robots';
+import { applySkin, wornSkin } from '../pass/pass';
 import { FieldMap } from './FieldMap';
 import { useGame } from './store';
 
@@ -28,7 +29,9 @@ export function Singleplayer({ onStart, onWindows }: Props) {
   const setStartPose = useGame((state) => state.setStartPose);
   const setScreen = useGame((state) => state.setScreen);
   const game = configuredGame(gameId, options);
-  const robot = findRobot(robotId, customRobots);
+  const skins = useGame((state) => state.settings.skins);
+  const champions = useGame((state) => state.champions);
+  const robot = applySkin(findRobot(robotId, customRobots), wornSkin(robotId, skins, champions));
   const other: Alliance = alliance === 'blue' ? 'red' : 'blue';
 
   useEffect(() => {

@@ -2,14 +2,31 @@ import { useEffect, useState } from 'react';
 import { accountsAvailable, fetchPlayer, rename } from '../account/account';
 import { topRobots, type PlayerStats } from '../stats';
 import { useGame } from './store';
+import { findReward } from '../pass/pass';
+import { fetchStandings, type Standing } from '../account/leaderboard';
+import { findRobot } from '../robots';
+import { BadgeMark } from './BadgeMark';
+import { CosmeticsSections } from './Cosmetics';
 
 /** A player's name as a button that opens their record, or as plain text when they have no account to look up. */
-export function PlayerName({ player }: { player: { name: string; accountId?: string } }) {
+export function PlayerName({ player }: { player: { name: string; accountId?: string; look?: { nameColor: string; badge: string } } }) {
   const showRecord = useGame((state) => state.showRecord);
-  if (!player.accountId) return <span>{player.name}</span>;
+  const color = findReward(player.look?.nameColor, 'nameColor')?.color;
+  const badge = findReward(player.look?.badge, 'badge');
+  const name = (
+    <>
+      <span style={color ? { color, fontWeight: 700 } : undefined}>{player.name}</span>
+      {badge && (
+        <span className="name-badge">
+          <BadgeMark reward={badge} />
+        </span>
+      )}
+    </>
+  );
+  if (!player.accountId) return <span>{name}</span>;
   return (
     <button className="player-link" onClick={() => showRecord({ accountId: player.accountId!, name: player.name })}>
-      {player.name}
+      {name}
     </button>
   );
 }
@@ -52,7 +69,7 @@ export function Record() {
         <button className="small" onClick={() => setScreen(back)}>
           Back
         </button>
-        <h1>Player record</h1>
+        <h1>{mine ? 'Player' : 'Player record'}</h1>
         <span className="muted">{mine ? 'Yours' : name}</span>
       </header>
 
@@ -104,10 +121,8 @@ export function Record() {
           )}
         </section>
 
-        <section className="card coming-soon" aria-disabled="true">
-          <h2>Leaderboard ranking</h2>
-          <p className="coming-soon-text">Coming soon!</p>
-        </section>
+        <Rankings accountId={mine ? account?.id : other?.accountId} />
+        {mine && <CosmeticsSections />}
       </div>
     </div>
   );
@@ -136,5 +151,39 @@ function Summary({ stats }: { stats: PlayerStats }) {
       <dt>Best singleplayer score</dt>
       <dd>{stats.singleMatches > 0 ? stats.singleBest : dash}</dd>
     </dl>
+  );
+}
+
+/** A player's five best leaderboard places this season. */
+function Rankings({ accountId }: { accountId: string | undefined }) {
+  const [standings, setStandings] = useState<Standing[] | null>(null);
+  useEffect(() => {
+    if (!accountId) return;
+    let current = true;
+    setStandings(null);
+    void fetchStandings(accountId).then((found) => current && setStandings(found ?? []));
+    return () => {
+      current = false;
+    };
+  }, [accountId]);
+  // Best places first; the overall board before a robot's at the same place.
+  const best = [...(standings ?? [])].sort((a, b) => a.place - b.place || (a.robotId === null ? -1 : 1)).slice(0, 5);
+  return (
+    <section className="card">
+      <h2>Leaderboard rankings</h2>
+      {!accountId && <p className="hint">Sign in to put runs on the leaderboards.</p>}
+      {accountId && !standings && <p className="hint">Reading the leaderboards…</p>}
+      {standings?.length === 0 && <p className="hint">Not in a top 20 this season yet.</p>}
+      <ol className="robot-ranks">
+        {best.map((standing) => (
+          <li key={standing.robotId ?? 'overall'}>
+            <span>
+              <strong>#{standing.place}</strong> {standing.robotId ? findRobot(standing.robotId).name : 'Season Overall'}
+            </span>
+            <span className="muted">{standing.score}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

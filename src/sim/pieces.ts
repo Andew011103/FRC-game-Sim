@@ -9,6 +9,8 @@ const LOOSE = -1;
 export const OFF_FIELD = -3;
 /** heldBy value for a spare piece waiting to be preloaded into a robot. */
 const RESERVE = -2;
+/** Steps after which a shot piece that never reached the floor stops showing its effect. */
+const LAUNCH_STEPS = 360;
 
 /**
  * Every game piece in a match. A piece is either loose (a live physics
@@ -22,6 +24,12 @@ export class PieceSet {
   readonly heldBy: number[] = [];
   /** The robot that last had each piece inside it, or -1. Says whose score a piece is when it lands in a goal. */
   readonly lastRobot: number[] = [];
+  /**
+   * The robot that shot each piece, while it is still in the air, or -1. Only
+   * for drawing: a shot piece shows its shooter's game piece effect until it lands.
+   */
+  readonly launchedBy: number[] = [];
+  private readonly launchAge: number[] = [];
   /** Positions before and after the latest step, three numbers per piece. */
   readonly prev: Float32Array;
   readonly cur: Float32Array;
@@ -53,6 +61,8 @@ export class PieceSet {
       this.cur[i * 3] = t.x;
       this.cur[i * 3 + 1] = t.y;
       this.cur[i * 3 + 2] = t.z;
+      // A shot is over once it reaches the floor, or after a few seconds caught on something.
+      if (this.launchedBy[i] >= 0 && (t.y <= this.radii[i] + 0.03 || ++this.launchAge[i] > LAUNCH_STEPS)) this.launchedBy[i] = -1;
     }
   }
 
@@ -64,6 +74,7 @@ export class PieceSet {
   hold(i: number, robotIndex: number): void {
     this.bodies[i].setEnabled(false);
     this.heldBy[i] = robotIndex;
+    this.launchedBy[i] = -1;
     if (robotIndex >= 0) this.lastRobot[i] = robotIndex;
   }
 
@@ -89,6 +100,12 @@ export class PieceSet {
     this.cur[i * 3 + 2] = position.z;
   }
 
+  /** Marks a piece just released as shot by a robot, so it is drawn with that robot's effect until it lands. */
+  launch(i: number, robotIndex: number): void {
+    this.launchedBy[i] = robotIndex;
+    this.launchAge[i] = 0;
+  }
+
   private create(world: World, group: PieceGroup, x: number, z: number, state: number): void {
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
@@ -112,5 +129,7 @@ export class PieceSet {
     this.colors.push(group.color);
     this.heldBy.push(state);
     this.lastRobot.push(-1);
+    this.launchedBy.push(-1);
+    this.launchAge.push(0);
   }
 }

@@ -1,3 +1,4 @@
+import { bumperOutline, frameOutline, hasShapedCorners, type Point } from '../robots/outline';
 import RAPIER, { type RigidBody, type World } from '@dimforge/rapier3d-compat';
 import type { Alliance, Spawn } from '../games/types';
 import type { DriverInput } from '../input/types';
@@ -97,6 +98,15 @@ export class SimRobot {
         .setRestitution(0.05)
         .setCollisionGroups(this.movingGroups);
     const round = chassis.round === true;
+    // A frame with cut corners is its true shape, made solid from its outline.
+    const shaped = hasShapedCorners(chassis);
+    const prism = (points: Point[], bottom: number, top: number) => {
+      const vertices = new Float32Array(points.length * 6);
+      points.forEach((point, i) => {
+        vertices.set([point.x, bottom, point.z, point.x, top, point.z], i * 6);
+      });
+      return RAPIER.ColliderDesc.convexHull(vertices)!;
+    };
     // A round frame is a disc; its bumper is a wider disc around the bottom of it.
     const disc = (radius: number, halfY: number) =>
       RAPIER.ColliderDesc.cylinder(halfY, radius)
@@ -104,7 +114,13 @@ export class SimRobot {
         .setFriction(0.25)
         .setRestitution(0.05)
         .setCollisionGroups(this.movingGroups);
-    if (round) {
+    if (shaped) {
+      world.createCollider(prism(frameOutline(chassis), -hy, hy).setDensity(0).setFriction(0.25).setRestitution(0.05).setCollisionGroups(this.movingGroups), this.body);
+      world.createCollider(
+        prism(bumperOutline(chassis), -hy, -hy + bumpers.height).setDensity(0).setFriction(0.25).setRestitution(0.05).setCollisionGroups(this.movingGroups),
+        this.body,
+      );
+    } else if (round) {
       world.createCollider(disc(chassis.length / 2, hy), this.body);
       if (hx > chassis.length / 2) {
         world.createCollider(disc(hx, bumpers.height / 2).setTranslation(0, -hy + bumpers.height / 2, 0), this.body);
@@ -113,7 +129,7 @@ export class SimRobot {
       world.createCollider(solid(chassis.length / 2, hy, chassis.width / 2), this.body);
     }
     // The bumpers are a band around the bottom of the frame, and can differ on each side.
-    if (!round && (hx > chassis.length / 2 || hz > chassis.width / 2)) {
+    if (!round && !shaped && (hx > chassis.length / 2 || hz > chassis.width / 2)) {
       world.createCollider(
         solid(hx, bumpers.height / 2, hz).setTranslation(
           (outline.front - outline.back) / 2,
@@ -128,7 +144,11 @@ export class SimRobot {
     if (def.traversal === 'bump') {
       const tall = BUMP_ROBOT_HEIGHT - chassis.groundClearance;
       world.createCollider(
-        (round ? RAPIER.ColliderDesc.cylinder(tall / 2, chassis.length / 2) : RAPIER.ColliderDesc.cuboid(chassis.length / 2, tall / 2, chassis.width / 2))
+        (shaped
+          ? prism(frameOutline(chassis), -tall / 2, tall / 2)
+          : round
+            ? RAPIER.ColliderDesc.cylinder(tall / 2, chassis.length / 2)
+            : RAPIER.ColliderDesc.cuboid(chassis.length / 2, tall / 2, chassis.width / 2))
           .setTranslation(0, -hy + tall / 2, 0)
           .setDensity(0)
           .setCollisionGroups(LOW_BAR_ONLY_GROUPS),
@@ -142,8 +162,12 @@ export class SimRobot {
     const skirtHeight = Math.max(0, chassis.groundClearance - SKIRT_GAP);
     if (skirtHeight > 0.005) {
       world.createCollider(
-        (round ? RAPIER.ColliderDesc.cylinder(skirtHeight / 2, hx) : RAPIER.ColliderDesc.cuboid(hx, skirtHeight / 2, hz))
-          .setTranslation((outline.front - outline.back) / 2, -hy - skirtHeight / 2, (outline.right - outline.left) / 2)
+        (shaped
+          ? prism(bumperOutline(chassis), -skirtHeight / 2, skirtHeight / 2)
+          : round
+            ? RAPIER.ColliderDesc.cylinder(skirtHeight / 2, hx)
+            : RAPIER.ColliderDesc.cuboid(hx, skirtHeight / 2, hz))
+          .setTranslation(shaped ? 0 : (outline.front - outline.back) / 2, -hy - skirtHeight / 2, shaped ? 0 : (outline.right - outline.left) / 2)
           .setDensity(0)
           .setFriction(0.1)
           .setCollisionGroups(LOOSE_ONLY_GROUPS),

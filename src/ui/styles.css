@@ -1596,6 +1596,8 @@ option {
   .screen-body.selector {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
+    /* Stacked, each part is as tall as its content, and the whole screen scrolls. */
+    grid-auto-rows: max-content;
     overflow-y: auto;
   }
 
@@ -2167,4 +2169,620 @@ option {
   justify-items: center;
   text-align: center;
   padding: 10px 16px;
+}
+.chat-lines li.system {
+  color: var(--warn);
+  font-style: italic;
+  font-size: 0.92em;
+}
+/* In a short window the builder's side panel scrolls rather than squeezing its contents together. */
+.builder-side > * {
+  flex-shrink: 0;
+}
+
+/* The Drive Pass: points, then a road of rewards. */
+.pass-body {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  /* Every row keeps its full height; the screen scrolls instead of squeezing them. */
+  grid-auto-rows: max-content;
+}
+.pass-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+@media (max-width: 760px) {
+  .pass-summary {
+    grid-template-columns: 1fr;
+  }
+}
+.pass-rp {
+  margin: 4px 0 8px;
+  font-size: 34px;
+  font-weight: 800;
+}
+.pass-progress {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--raised);
+  overflow: hidden;
+}
+.pass-progress div {
+  height: 100%;
+  background: var(--accent);
+}
+.pass-rules {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.pass-rules li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pass-dev {
+  font-size: 13px;
+  color: var(--muted);
+}
+.pass-road {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+}
+.pass-card {
+  flex: 0 0 180px;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  justify-items: start;
+  opacity: 0.55;
+}
+.pass-card.open {
+  opacity: 1;
+}
+.pass-card.equipped {
+  border-color: var(--accent);
+}
+.pass-card-rp {
+  font-weight: 800;
+  font-size: 18px;
+}
+.pass-card-type,
+.pass-card-preview {
+  font-size: 12px;
+}
+.pass-preview {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+}
+.pass-name {
+  font-weight: 800;
+  font-size: 18px;
+}
+.pass-badge {
+  font-size: 30px;
+}
+.pass-swatches {
+  display: flex;
+  gap: 3px;
+}
+.pass-swatches i {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.pass-skin {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 12px;
+}
+.pass-led {
+  width: 120px;
+  height: 14px;
+  border-radius: 7px;
+  margin: 17px 0;
+  min-height: 0;
+}
+.pass-led-strobe {
+  background: #22c55e;
+  animation: pass-strobe 0.2s steps(2) infinite;
+}
+.pass-led-breathe {
+  background: #38bdf8;
+  animation: pass-breathe 2.5s ease-in-out infinite;
+}
+.pass-led-rainbow {
+  background: linear-gradient(90deg, #ef4444, #f59e0b, #eab308, #22c55e, #3b82f6, #8b5cf6, #ef4444);
+  background-size: 200% 100%;
+  animation: pass-rainbow 2s linear infinite;
+}
+.pass-led-police {
+  background: #3b82f6;
+  animation: pass-police 0.4s steps(2) infinite;
+}
+@keyframes pass-strobe {
+  50% {
+    background: #ffffff;
+  }
+}
+@keyframes pass-breathe {
+  50% {
+    opacity: 0.15;
+  }
+}
+@keyframes pass-rainbow {
+  to {
+    background-position: 200% 0;
+  }
+}
+@keyframes pass-police {
+  50% {
+    background: #ffffff;
+  }
+}
+.pass-editor {
+  display: grid;
+  gap: 10px;
+}
+.pass-tier-editor {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--raised);
+}
+.pass-tier-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+.pass-tier-row label {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pass-tier-row input[type='text'],
+.pass-tier-row input[type='number'],
+.pass-editor select {
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.pass-tier-row input[type='number'] {
+  width: 90px;
+}
+.pass-skin-part {
+  display: flex;
+  gap: 4px;
+  align-items: end;
+}
+/* A Drive Pass name decoration. */
+.name-badge {
+  margin-left: 4px;
+}
+.pass-led-blink {
+  background: #22c55e;
+  animation: pass-blink 1.5s steps(1) infinite;
+}
+.pass-led-chase {
+  background: linear-gradient(90deg, #1d4ed8 0%, #1d4ed8 40%, rgba(255, 255, 255, 0.35) 55%, #ffffff 60%, #1d4ed8 61%);
+  background-size: 200% 100%;
+  animation: pass-chase 1.2s linear infinite;
+}
+.pass-led-bounce {
+  background: radial-gradient(circle at center, #ffffff 0 6px, transparent 7px) no-repeat, #3b1d1d;
+  background-size: 14px 14px, auto;
+  animation: pass-bounce 1.6s ease-in-out infinite alternate;
+}
+@keyframes pass-blink {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  5%,
+  15% {
+    opacity: 1;
+  }
+  10%,
+  20% {
+    opacity: 0.12;
+  }
+}
+@keyframes pass-chase {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@keyframes pass-bounce {
+  from {
+    background-position: 0 0, 0 0;
+  }
+  to {
+    background-position: 100% 0, 0 0;
+  }
+}
+
+/* A foul being called: small, under the scoreboard, gone in two seconds. */
+.foul-popup {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(15, 18, 22, 0.78);
+  border: 2px solid #facc15;
+  pointer-events: none;
+  animation: foul-fade 2s ease-out forwards;
+}
+.foul-popup.blue {
+  border-color: #3b82f6;
+}
+.foul-popup.red {
+  border-color: #ef4444;
+}
+@keyframes foul-fade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+  10%,
+  75% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.ranking-points {
+  margin: 4px 0 0;
+  font-weight: 700;
+}
+.subsystem-actions {
+  display: flex;
+  gap: 6px;
+}
+.badge-image {
+  width: 1.2em;
+  height: 1.2em;
+  vertical-align: -0.2em;
+  object-fit: contain;
+}
+.pass-badge .badge-image {
+  width: 40px;
+  height: 40px;
+}
+.pass-new-season {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+}
+.pass-new-season summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.pass-new-season input[type='text'] {
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+/* Leaderboards: categories on the left, the board on the right. */
+.screen-body.board-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+}
+@media (max-width: 760px) {
+  .screen-body.board-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    overflow-y: auto;
+  }
+}
+.board-categories {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.board-categories button {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.board-categories button.selected {
+  background: var(--raised);
+  border-color: var(--accent);
+}
+.board {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.board-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.season-countdown {
+  color: var(--muted);
+  font-size: 13px;
+}
+.countdown-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text);
+}
+.board-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.board-rows li {
+  display: grid;
+  grid-template-columns: 2.5em minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+}
+.board-rows li.mine {
+  outline: 1px solid var(--accent);
+}
+.board-place {
+  font-weight: 800;
+  text-align: center;
+}
+.board-rows li.place-1 .board-place {
+  color: #facc15;
+}
+.board-rows li.place-2 .board-place {
+  color: #cbd5e1;
+}
+.board-rows li.place-3 .board-place {
+  color: #d97706;
+}
+.board-score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pass-champions {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.pass-champions li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+.hud-speed-cap {
+  position: fixed;
+  top: 78px;
+  left: 16px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* A game piece effect: a ball flying across a little stage, glowing or leaving a trail. */
+.pass-piece-stage {
+  position: relative;
+  width: 120px;
+  height: 48px;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #0b0d12;
+}
+.pass-piece {
+  position: absolute;
+  top: 18px;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  /* --piece is the fuel's own colour with its share of the effect's; --halo the glow around it. */
+  background: var(--piece);
+  box-shadow: 0 0 10px 4px var(--halo);
+  animation: pass-piece-fly 1.6s linear infinite;
+}
+@keyframes pass-piece-fly {
+  from {
+    transform: translateX(-14px);
+  }
+  to {
+    transform: translateX(124px);
+  }
+}
+.pass-piece-pulse {
+  animation: pass-piece-fly 1.6s linear infinite, pass-piece-pulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes pass-piece-pulse {
+  from {
+    box-shadow: 0 0 4px 1px var(--halo);
+  }
+  to {
+    box-shadow: 0 0 14px 7px var(--halo);
+  }
+}
+.pass-piece-blink {
+  animation: pass-piece-fly 1.6s linear infinite, pass-piece-blink 0.33s steps(2) infinite;
+}
+@keyframes pass-piece-blink {
+  50% {
+    box-shadow: none;
+    background: #f5d33b;
+  }
+}
+.pass-piece-rainbow {
+  animation: pass-piece-fly 1.6s linear infinite, pass-piece-rainbow 1.2s linear infinite;
+}
+@keyframes pass-piece-rainbow {
+  0%,
+  100% {
+    box-shadow: 0 0 10px 4px #ef4444;
+  }
+  33% {
+    box-shadow: 0 0 10px 4px #22c55e;
+  }
+  66% {
+    box-shadow: 0 0 10px 4px #3b82f6;
+  }
+}
+.pass-piece-flame {
+  background: #fff2c0;
+  box-shadow: -8px 0 8px 2px var(--halo), -18px -2px 10px 1px color-mix(in srgb, var(--halo) 60%, transparent), 0 0 8px 3px #ffd27a;
+}
+.pass-piece-comet {
+  box-shadow: 0 0 6px 2px var(--halo), -10px 0 6px 0 var(--halo), -20px 0 6px -1px color-mix(in srgb, var(--halo) 60%, transparent),
+    -30px 0 6px -2px color-mix(in srgb, var(--halo) 30%, transparent);
+}
+.pass-piece-sparkle {
+  box-shadow: 0 0 6px 2px var(--halo), -12px -5px 0 -3px #ffffff, -20px 4px 0 -3px var(--halo), -28px -2px 0 -4px #ffffff;
+}
+.pass-piece-electric {
+  animation: pass-piece-fly 1.6s linear infinite, pass-piece-electric 0.15s steps(3) infinite;
+}
+@keyframes pass-piece-electric {
+  0% {
+    box-shadow: 0 0 10px 5px var(--halo);
+  }
+  50% {
+    box-shadow: 0 0 4px 2px #ffffff, 6px -6px 0 -4px #ffffff;
+  }
+  100% {
+    box-shadow: 0 0 12px 3px var(--halo), -6px 6px 0 -4px var(--halo);
+  }
+}
+.pass-piece-orbit {
+  box-shadow: 0 0 6px 1px var(--halo), 0 -11px 0 -3px var(--halo), 0 11px 0 -3px var(--halo);
+}
+.pass-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Home: the Drive Pass and the player's own button, top right. */
+.home-top {
+  position: absolute;
+  top: 16px;
+  right: clamp(16px, 2vw, 28px);
+  display: flex;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+}
+.home-top button {
+  min-width: 150px;
+  max-width: 220px;
+  padding: 12px 18px;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-player {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.home-player:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+/* The Drive Pass stands out in its own colour, whatever the theme. */
+.home-pass {
+  color: #f5e9ff;
+  background: linear-gradient(135deg, #4c1d95, #7e22ce 55%, #a21caf);
+  border: 1px solid #c084fc;
+  box-shadow: 0 0 18px rgba(168, 85, 247, 0.45);
+}
+.home-pass:hover:not(:disabled) {
+  filter: brightness(1.15);
+  box-shadow: 0 0 26px rgba(192, 132, 252, 0.6);
+}
+@media (max-width: 600px) {
+  .home-top button {
+    min-width: 0;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+}
+.cosmetics h3 {
+  margin: 18px 0 8px;
+}
+.screen-body .cosmetics {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
+/* The chosen robot's panel: each row as tall as its content, never squeezed. */
+.picked {
+  grid-auto-rows: max-content;
+}
+/* A skin's game piece effect, on a fuel ball flying across a strip above the robot. */
+.effect-window {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.effect-window > div:first-child {
+  height: 64px;
+  width: 100%;
+}
+.effect-window-label {
+  position: absolute;
+  left: 12px;
+  top: 6px;
+  font-size: 12px;
+  color: #cbd5e1;
+  pointer-events: none;
 }

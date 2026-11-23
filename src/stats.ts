@@ -20,6 +20,8 @@ export interface PlayerStats {
   /** Timed singleplayer matches finished, and the best score in one. */
   singleMatches: number;
   singleBest: number;
+  /** Multiplayer: bonus ranking points earned (Energized, Supercharged, Traversal), summed. */
+  bonusRp: number;
   /** Matches driven with each robot, of either kind, by the robot's name. */
   robots: Record<string, number>;
 }
@@ -35,6 +37,7 @@ export const EMPTY_STATS: PlayerStats = {
   soloMatches: 0,
   singleMatches: 0,
   singleBest: 0,
+  bonusRp: 0,
   robots: {},
 };
 
@@ -66,6 +69,8 @@ export interface FinishedMatch {
   single: boolean;
   /** Multiplayer: the points the player's own robot scored, or null where that was not recorded. */
   solo: number | null;
+  /** Multiplayer: how many bonus ranking points the player's alliance earned; missing on older records. */
+  bonusRp?: number;
 }
 
 /** A record with one more finished match added. */
@@ -87,7 +92,34 @@ export function withMatch(stats: PlayerStats, match: FinishedMatch): PlayerStats
     totalScore: stats.totalScore + mine,
     soloTotal: stats.soloTotal + (match.solo ?? 0),
     soloMatches: stats.soloMatches + (match.solo === null ? 0 : 1),
+    bonusRp: stats.bonusRp + Math.max(0, Math.min(3, Math.round(match.bonusRp ?? 0))),
   };
+}
+
+const SEASON_KEY = 'drive-practice.season';
+
+/** This browser's record for a Drive Pass season: only matches played since it started. Empty in a new season. */
+export function loadSeasonStats(season: string): PlayerStats {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SEASON_KEY) ?? '{}') as { season?: string; stats?: Record<string, unknown> };
+    if (saved.season !== season || !saved.stats) return { ...EMPTY_STATS, robots: {} };
+    const stats: PlayerStats = { ...EMPTY_STATS, robots: {} };
+    for (const key of Object.keys(EMPTY_STATS) as (keyof PlayerStats)[]) {
+      if (key !== 'robots') stats[key] = count(saved.stats[key]);
+    }
+    return stats;
+  } catch {
+    return { ...EMPTY_STATS, robots: {} };
+  }
+}
+
+/** Adds a match to this browser's record for the season. A new season starts a new record. */
+export function recordSeasonMatch(match: FinishedMatch, season: string): void {
+  try {
+    localStorage.setItem(SEASON_KEY, JSON.stringify({ season, stats: withMatch(loadSeasonStats(season), match) }));
+  } catch {
+    // Not being able to save is harmless; the match is still on the full record.
+  }
 }
 
 export function recordMatch(match: FinishedMatch): void {

@@ -19,6 +19,13 @@ export interface ChassisDef {
   bumperHeight?: number;
   /** A round frame: a disc whose diameter is the length, with one ring of bumper as thick as the front bumper. */
   round?: boolean;
+  /** How the frame's corners are cut: straight across, or rounded. */
+  cornerStyle?: 'chamfer' | 'round';
+  /** How much is cut off each corner, measured along the sides. 0 leaves a corner square. */
+  cornerFL?: number;
+  cornerFR?: number;
+  cornerBR?: number;
+  cornerBL?: number;
   /** Height of the centre of mass above the floor. Defaults to a low value. */
   comHeight?: number;
 }
@@ -71,6 +78,13 @@ export interface RobotDefinition {
   team?: string;
   /** The team's icon as a small image data URL, for the scoreboard. */
   icon?: string;
+  /**
+   * Set while a Drive Pass skin is being made in the builder: the official
+   * robot it dresses up, the reward it is saved as, and the Ranking Points it needs.
+   */
+  skinOf?: { robotId: string; rewardId: string; rp: number; champion?: boolean };
+  /** Drive Pass: how fuel this robot shoots looks in the air. Only ever set by a skin or an equipped reward. */
+  pieceEffect?: { kind: string; color: string; fuelColor?: number; glow?: number; intensity?: number };
   /** How strong the robot is, 0.0 to 100.0. Set for official robots only, so multiplayer alliances can be made even. */
   epa?: number;
   /**

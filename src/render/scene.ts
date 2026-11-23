@@ -1,7 +1,27 @@
+import { bumperOutline, cornerCuts, frameOutline, hasShapedCorners, type Point } from '../robots/outline';
 import * as THREE from 'three';
-import type { BoxElement, GoalLight } from '../games/types';
+import type { Alliance, BoxElement, GoalLight } from '../games/types';
 import { bumpersOf } from '../robots/chassis';
 import type { PieceSet } from '../sim/pieces';
+import { PieceEffects } from './pieceEffects';
+import type { RobotDefinition } from '../robots/types';
+import { FUEL } from '../games/rebuilt-2026/field';
+
+const FUEL_RADIUS = FUEL.radius;
+const FUEL_COLOR = FUEL.color;
+/** How long the ball in an effect window takes to cross it. */
+const EFFECT_FLIGHT_SECONDS = 1.4;
+
+interface EffectWindow {
+  elementId: string;
+  group: THREE.Group;
+  mesh: THREE.InstancedMesh;
+  effects: PieceEffects;
+  pieces: PieceSet;
+  shooter: SimRobot;
+  phase: number;
+  time: number;
+}
 import type { SimRobot } from '../sim/robot';
 import type { PartView } from '../sim/subsystems/types';
 import type { SimWorld } from '../sim/world';
@@ -12,7 +32,7 @@ interface RobotView {
   robot: SimRobot;
   group: THREE.Group;
   steerGroups: THREE.Group[];
-  parts: { part: PartView; mesh: THREE.Mesh }[];
+  parts: { part: PartView; mesh: THREE.Mesh; color: string }[];
 }
 
 export type Quality = 'low' | 'medium' | 'high';
@@ -41,6 +61,8 @@ export class SceneView {
   /** Robots drawn by themselves in boxes on the page, outside the field's own content. */
   private windowGroup = new THREE.Group();
   private windows: { elementId: string; view: RobotView; spin: boolean }[] = [];
+  /** Windows showing one fuel ball flying with a game piece effect, to show what an effect looks like. */
+  private effectWindows: EffectWindow[] = [];
   private readonly windowCamera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 50);
   /** Background of screens that show no field. */
   private readonly plainColor = new THREE.Color(0x0b0d12);
@@ -49,6 +71,10 @@ export class SceneView {
   private playerIndex = 0;
   private propViews: THREE.Mesh[] = [];
   private pieceMesh: THREE.InstancedMesh | null = null;
+  private pieceEffects: PieceEffects | null = null;
+  private readonly bufferSize = new THREE.Vector2();
+  /** Whether game piece effects are drawn at all, a player's own choice. */
+  private showPieceEffects = true;
   private readonly tagged = new Map<string, { material: THREE.MeshStandardMaterial; color: string }[]>();
   private field ={ length: 16.54, width: 8.07 };
   private readonly sun = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -106,6 +132,8 @@ export class SceneView {
 
   /** Rebuilds every mesh for a newly created world. */
   setWorld(sim: SimWorld): void {
+    this.pieceEffects?.dispose();
+    this.pieceEffects = null;
     disposeGroup(this.content);
     this.scene.remove(this.content);
     this.content = new THREE.Group();
@@ -146,6 +174,8 @@ export class SceneView {
     if (this.pieceMesh) {
       this.pieceMesh.castShadow = QUALITY_SETTINGS[this.quality ?? 'high'].pieceShadows;
       this.content.add(this.pieceMesh);
+      this.pieceEffects = new PieceEffects(sim.pieces);
+      this.content.add(this.pieceEffects.points);
     }
   }
 
@@ -174,6 +204,10 @@ export class SceneView {
     this.robotViews.forEach((view) => poseRobotView(view, alpha));
 
     if (this.pieceMesh) updatePieceMesh(this.pieceMesh, sim.pieces, alpha);
+    if (this.pieceEffects) {
+      this.pieceEffects.setScale(this.renderer.getDrawingBufferSize(this.bufferSize).y, this.camera.fov);
+      this.pieceEffects.update(sim.pieces, sim.robots, this.pieceMesh, alpha, frameDt, this.showPieceEffects);
+    }
 
     sim.props.forEach((prop, i) => {
       blendPose(this.propViews[i], prop.prevPos, prop.prevRot, prop.body.translation(), prop.body.rotation(), alpha);
@@ -182,6 +216,11 @@ export class SceneView {
     this.frameView(mode);
     this.placeCamera(mode, time, frameDt);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Turns every game piece effect on or off, the player's own and everyone else's. */
+  setPieceEffects(on: boolean): void {
+    this.showPieceEffects = on;
   }
 
   setPlainColor(color: string): void {
@@ -200,6 +239,36 @@ export class SceneView {
       poseRobotView(view, 1);
       this.windowGroup.add(view.group);
       return { elementId: item.elementId, view, spin: item.spin };
+    });
+  }
+
+  /** Sets the windows that show a fuel ball flying with a game piece effect. */
+  setEffectWindows(items: { elementId: string; effect: NonNullable<RobotDefinition['pieceEffect']>; alliance: Alliance }[]): void {
+    for (const old of this.effectWindows) {
+      this.scene.remove(old.group);
+      old.effects.dispose();
+      disposeGroup(old.group);
+    }
+    this.effectWindows = items.map((item) => {
+      // A stand-in for a field's pieces: one ball, always in the air from a shot by robot 0.
+      const pieces = {
+        count: 1,
+        prev: new Float32Array(3),
+        cur: new Float32Array(3),
+        heldBy: [-1],
+        launchedBy: [0],
+        radii: [FUEL_RADIUS],
+        colors: [FUEL_COLOR],
+      } as unknown as PieceSet;
+      const shooter = { def: { pieceEffect: item.effect }, alliance: item.alliance } as unknown as SimRobot;
+      const group = new THREE.Group();
+      group.visible = false;
+      const mesh = buildPieceMesh(pieces)!;
+      mesh.castShadow = false;
+      const effects = new PieceEffects(pieces);
+      group.add(mesh, effects.points);
+      this.scene.add(group);
+      return { elementId: item.elementId, group, mesh, effects, pieces, shooter, phase: 0, time: -1 };
     });
   }
 
@@ -247,6 +316,46 @@ export class SceneView {
       renderer.render(scene, camera);
     }
 
+    this.windowGroup.visible = false;
+    for (const window of this.effectWindows) {
+      const element = document.getElementById(window.elementId);
+      const box = element?.getBoundingClientRect();
+      if (!element || !box || box.width < 2 || box.height < 2) continue;
+      const clip = element.closest('[data-clip]')?.getBoundingClientRect() ?? canvas;
+      const left = Math.max(box.left, clip.left, canvas.left);
+      const right = Math.min(box.right, clip.right, canvas.right);
+      const top = Math.max(box.top, clip.top, canvas.top);
+      const bottom = Math.min(box.bottom, clip.bottom, canvas.bottom);
+      if (right - left < 1 || bottom - top < 1) continue;
+
+      // The ball flies across the window in a gentle arc, over and over, as if just shot.
+      const dt = window.time < 0 ? 0 : Math.min(0.1, Math.max(0, time - window.time));
+      window.time = time;
+      const span = 0.9 * (box.width / box.height);
+      const before = window.phase;
+      window.phase = (window.phase + dt / EFFECT_FLIGHT_SECONDS) % 1;
+      const { cur, prev } = window.pieces;
+      cur[0] = -span / 2 - 0.2 + (span + 0.4) * window.phase;
+      cur[1] = 0.12 * Math.sin(window.phase * Math.PI);
+      cur[2] = 0;
+      prev.set(cur);
+      // Starting again from the left is a new shot, so no trail is drawn across the window.
+      window.pieces.launchedBy[0] = window.phase < before ? -1 : 0;
+      window.effects.setScale(box.height * renderer.getPixelRatio(), camera.fov);
+      window.effects.update(window.pieces, [window.shooter], window.mesh, 1, dt);
+      updatePieceMesh(window.mesh, window.pieces, 1);
+
+      window.group.visible = true;
+      renderer.setViewport(box.left - canvas.left, canvas.bottom - box.bottom, box.width, box.height);
+      renderer.setScissor(left - canvas.left, canvas.bottom - bottom, right - left, bottom - top);
+      camera.aspect = box.width / box.height;
+      camera.updateProjectionMatrix();
+      camera.position.set(0, 0.05, 0.62);
+      camera.lookAt(0, 0.05, 0);
+      renderer.render(scene, camera);
+      window.group.visible = false;
+    }
+
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, canvas.width, canvas.height);
     scene.background = BACKGROUND;
@@ -264,6 +373,7 @@ export class SceneView {
     const inspecting = mode === 'inspect';
     this.fieldGroup.visible = !inspecting;
     if (this.pieceMesh) this.pieceMesh.visible = !inspecting;
+    if (this.pieceEffects) this.pieceEffects.points.visible = !inspecting;
     if (!inspecting) {
       if (this.inspecting) {
         this.inspecting = false;
@@ -375,10 +485,17 @@ function poseRobotView(view: RobotView, alpha: number): void {
   view.steerGroups.forEach((steer, i) => {
     steer.rotation.y = robot.wheels[i].steer;
   });
-  for (const { part, mesh } of view.parts) {
+  for (const entry of view.parts) {
+    const { part, mesh } = entry;
+    if (part.color !== entry.color) {
+      entry.color = part.color;
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      material.color.set(part.color);
+      if (part.glow) material.emissive.set(part.color);
+    }
     mesh.visible = part.visible;
     mesh.position.set(part.position.x, part.position.y, part.position.z);
-    mesh.rotation.set(0, part.yaw, part.pitch);
+    mesh.rotation.set(part.roll ?? 0, part.yaw, part.pitch);
     // Every part is a unit shape stretched to its current size, so parts can grow and shrink.
     mesh.scale.set(part.size[0], part.size[1], part.size[2]);
   }
@@ -466,6 +583,16 @@ function buildFloor(length: number, width: number, zone: number): THREE.Group {
   return group;
 }
 
+/** A solid of the given height whose outline seen from above is `points`, centred on its middle height. */
+function outlineSolid(points: Point[], height: number): THREE.BufferGeometry {
+  // A shape's (x, y) becomes the robot's (x, -z) once the solid is stood upright.
+  const shape = new THREE.Shape(points.map((point) => new THREE.Vector2(point.x, -point.z)));
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
+  geometry.rotateX(-Math.PI / 2);
+  geometry.translate(0, -height / 2, 0);
+  return geometry;
+}
+
 function buildRobotView(robot: SimRobot): RobotView {
   const { chassis, drivetrain } = robot.def;
   const group = new THREE.Group();
@@ -500,14 +627,19 @@ function buildRobotView(robot: SimRobot): RobotView {
         group.add(mesh);
       }
     }
+  } else if (hasShapedCorners(chassis)) {
+    // The frame and its bumpers drawn from their outlines, cut corners and all.
+    part(outlineSolid(frameOutline(chassis), chassis.height), robot.def.color ?? '#9aa3af', 0.5);
+    const band = part(outlineSolid(bumperOutline(chassis), bumpers.height), ALLIANCE_COLORS[robot.alliance]);
+    band.position.y = -hy + bumpers.height / 2;
   } else {
     part(new THREE.BoxGeometry(chassis.length, chassis.height, chassis.width), robot.def.color ?? '#9aa3af', 0.5);
   }
 
   // One bumper slab per side. The front and back slabs also cover the corners.
   const bumper = (sizeX: number, sizeZ: number, x: number, z: number) => {
-    // A round frame's bumper ring is drawn above.
-    if (chassis.round || sizeX <= 0 || sizeZ <= 0) return;
+    // A round frame's bumper ring, and the bumpers of a frame with cut corners, are drawn above.
+    if (chassis.round || hasShapedCorners(chassis) || sizeX <= 0 || sizeZ <= 0) return;
     const mesh = part(new THREE.BoxGeometry(sizeX, bumpers.height, sizeZ), ALLIANCE_COLORS[robot.alliance]);
     mesh.position.set(x, -hy + bumpers.height / 2, z);
   };
@@ -532,10 +664,14 @@ function buildRobotView(robot: SimRobot): RobotView {
       group.add(mesh);
     };
     const out = 0.003;
-    number(bumpers.front, chassis.length / 2 + bumpers.front + out, midZ, Math.PI / 2, outerWidth);
-    number(bumpers.back, -chassis.length / 2 - bumpers.back - out, midZ, -Math.PI / 2, outerWidth);
-    number(bumpers.right, 0, chassis.width / 2 + bumpers.right + out, 0, chassis.length);
-    number(bumpers.left, 0, -chassis.width / 2 - bumpers.left - out, Math.PI, chassis.length);
+    // Numbers fit on the straight part of each side, between any cut corners.
+    const cut = cornerCuts(chassis);
+    const shaped = hasShapedCorners(chassis);
+    const room = (full: number, a: number, b: number) => (shaped ? Math.max(0.05, full - a - b) : full);
+    number(bumpers.front, chassis.length / 2 + bumpers.front + out, midZ, Math.PI / 2, room(outerWidth, cut.cornerFL, cut.cornerFR));
+    number(bumpers.back, -chassis.length / 2 - bumpers.back - out, midZ, -Math.PI / 2, room(outerWidth, cut.cornerBL, cut.cornerBR));
+    number(bumpers.right, 0, chassis.width / 2 + bumpers.right + out, 0, room(chassis.length, cut.cornerFR, cut.cornerBR));
+    number(bumpers.left, 0, -chassis.width / 2 - bumpers.left - out, Math.PI, room(chassis.length, cut.cornerFL, cut.cornerBL));
   }
 
   const steerGroups = robot.wheels.map((wheel) => {
@@ -556,7 +692,11 @@ function buildRobotView(robot: SimRobot): RobotView {
       const opacity = partView.opacity ?? 1;
       const round = partView.shape === 'cylinder';
       const mesh = new THREE.Mesh(
-        round ? new THREE.CylinderGeometry(0.5, 0.5, 1, 28) : new THREE.BoxGeometry(1, 1, 1),
+        round
+          ? new THREE.CylinderGeometry(0.5, 0.5, 1, 28)
+          : partView.outline
+            ? outlineSolid(partView.outline, 1)
+            : new THREE.BoxGeometry(1, 1, 1),
         new THREE.MeshStandardMaterial({
           color: partView.color,
           flatShading: !round,
@@ -572,7 +712,7 @@ function buildRobotView(robot: SimRobot): RobotView {
       mesh.rotation.order = 'YZX';
       mesh.castShadow = opacity >= 1;
       group.add(mesh);
-      return { part: partView, mesh };
+      return { part: partView, mesh, color: partView.color };
     }),
   );
 

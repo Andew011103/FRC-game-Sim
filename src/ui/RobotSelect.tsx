@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { RobotWindow } from '../game';
+import type { EffectWindow, RobotWindow } from '../game';
+import { PIECE_EFFECTS } from '../pass/effects';
 import { OFFICIAL_ROBOTS, findRobot } from '../robots';
 import { configuredGame } from '../games';
 import { epaOf } from '../robots/epa';
+import { allRewards, applySkin, skinsFor, wornSkin, type Reward } from '../pass/pass';
+import { useUnlocked } from './passHooks';
 import { robotStats, robotTags } from '../robots/stats';
 import { EpaTag } from './Epa';
 import type { RobotDefinition } from '../robots/types';
@@ -11,6 +14,8 @@ import { useGame } from './store';
 interface Props {
   /** Tells the 3D view which robots to draw in which boxes on this screen. */
   onWindows: (windows: RobotWindow[]) => void;
+  /** Tells the 3D view where to show a fuel ball with a skin's game piece effect. */
+  onEffectWindows: (windows: EffectWindow[]) => void;
 }
 
 const teamNumber = (robot: RobotDefinition): string | null => robot.team ?? null;
@@ -19,7 +24,7 @@ const teamNumber = (robot: RobotDefinition): string | null => robot.team ?? null
 const barColor = (fraction: number): string => (fraction < 0.34 ? 'bad' : fraction < 0.67 ? 'warn' : 'good');
 
 /** A grid of every robot, with the chosen one shown large beside its figures. */
-export function RobotSelect({ onWindows }: Props) {
+export function RobotSelect({ onWindows, onEffectWindows }: Props) {
   const ready = useGame((state) => state.ready);
   const robotId = useGame((state) => state.robotId);
   const setRobotId = useGame((state) => state.setRobotId);
@@ -42,17 +47,38 @@ export function RobotSelect({ onWindows }: Props) {
       return byName(a, b);
     });
   }, [customRobots, sort]);
-  const picked = findRobot(robotId, customRobots);
+  const skins = useGame((state) => state.settings.skins);
+  const updateSettings = useGame((state) => state.updateSettings);
+  const unlocked = useUnlocked();
+  const pickedBase = findRobot(robotId, customRobots);
+  // Each robot is shown in the skin the player has on it.
+  const champions = useGame((state) => state.champions);
+  const picked = applySkin(pickedBase, wornSkin(pickedBase.id, skins, champions));
+  const skinChoices = skinsFor(pickedBase.id).filter((skin) => unlocked.has(skin.id) || skins[pickedBase.id] === skin.id);
+  // Game piece effects the player has, equipped for every robot.
+  const pieceEffect = useGame((state) => state.settings.pieceEffect);
+  const effectChoices = allRewards().filter(
+    (reward): reward is Extract<Reward, { type: 'pieceEffect' }> =>
+      reward.type === 'pieceEffect' && (unlocked.has(reward.id) || reward.id === pieceEffect),
+  );
   const stats = robotStats(picked);
 
   useEffect(() => {
     if (!ready) return;
     onWindows([
-      ...robots.map((robot) => ({ elementId: `robot-window-${robot.id}`, robot, alliance, spin: false })),
+      ...robots.map((robot) => ({ elementId: `robot-window-${robot.id}`, robot: applySkin(robot, wornSkin(robot.id, skins, champions)), alliance, spin: false })),
       { elementId: 'robot-window-picked', robot: picked, alliance, spin: true },
     ]);
     return () => onWindows([]);
-  }, [ready, robots, picked, alliance, onWindows]);
+  }, [ready, robots, picked, alliance, onWindows, skins, champions]);
+
+  // A skin that comes with its own game piece effect shows it on a flying fuel ball, above the robot.
+  const skinEffect = picked.pieceEffect;
+  useEffect(() => {
+    if (!ready) return;
+    onEffectWindows(skinEffect ? [{ elementId: 'effect-window-picked', effect: skinEffect, alliance }] : []);
+    return () => onEffectWindows([]);
+  }, [ready, skinEffect, alliance, onEffectWindows]);
 
   return (
     <div className="screen">
@@ -99,16 +125,59 @@ export function RobotSelect({ onWindows }: Props) {
           ))}
         </div>
 
-        <section className="picked">
+        <section className="picked" data-clip>
           <p className="muted">You have picked:</p>
           <div className="picked-title">
             <h2>{picked.name}</h2>
             <EpaTag robot={picked} />
             {teamNumber(picked) && <span className="team-badge">{teamNumber(picked)}</span>}
           </div>
+          {skinEffect && (
+            <div className="effect-window">
+              <div id="effect-window-picked" />
+              <span className="effect-window-label">
+                {PIECE_EFFECTS.find((effect) => effect.value === skinEffect.kind)?.label.split(':')[0] ?? 'Game piece'} effect, with this skin
+              </span>
+            </div>
+          )}
           <div className="robot-window">
             <div id="robot-window-picked" />
           </div>
+          {skinChoices.length > 0 && (
+            <label className="field">
+              <span>Skin</span>
+              <select
+                value={skins[pickedBase.id] ?? ''}
+                onChange={(event) => {
+                  const next = { ...skins };
+                  if (event.target.value) next[pickedBase.id] = event.target.value;
+                  else delete next[pickedBase.id];
+                  updateSettings({ skins: next });
+                }}
+              >
+                <option value="">Standard</option>
+                {skinChoices.map((skin) => (
+                  <option key={skin.id} value={skin.id}>
+                    {skin.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {/* A skin with its own effect always uses it, so there is nothing to pick. */}
+          {effectChoices.length > 0 && !skinEffect && (
+            <label className="field">
+              <span>Game piece effect</span>
+              <select value={pieceEffect} onChange={(event) => updateSettings({ pieceEffect: event.target.value })}>
+                <option value="">None</option>
+                {effectChoices.map((reward) => (
+                  <option key={reward.id} value={reward.id}>
+                    {reward.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="stats">
             {stats.map((stat) => (
               <div className="stat" key={stat.label}>

@@ -105,6 +105,17 @@ class Shooter implements Subsystem {
   /** Time until each lane can fire again. Lanes run on their own clocks, so shots come out staggered. */
   private readonly cooldowns: number[];
   private firing = false;
+  private aimingToPass = false;
+
+  /** Whether it is firing right now. */
+  get shooting(): boolean {
+    return this.firing;
+  }
+
+  /** Whether it is aiming at a spot to pass to rather than its goal. */
+  get passing(): boolean {
+    return this.aimingToPass;
+  }
   /** Seconds the shooter has been lined up with shoot held. */
   private linedUpFor = 0;
   /** Launch direction in the robot's own space. */
@@ -144,6 +155,7 @@ class Shooter implements Subsystem {
     const s = this.settings;
     const muzzle = add(robot.position(), rotate(robot.rotation(), this.muzzle));
     const aim = sim.aimFor(robot.alliance, muzzle, robot);
+    this.aimingToPass = aim?.pass === true;
     const fixedPitch = s.pitch * DEG;
     if (!aim) return { muzzle, bearing: null, speed: s.speed, pitch: fixedPitch };
     const target = aim.point;
@@ -283,6 +295,7 @@ class Shooter implements Subsystem {
         sim.pieces.release(piece, at, add(own, scale(bounced, BLOCKED_BOUNCE)));
       } else {
         sim.pieces.release(piece, add(from, scale(dir, RELEASE_OFFSET)), velocity);
+        sim.pieces.launch(piece, robot.index);
       }
       // Uneven gaps keep the lanes from falling back into step. The average rate is unchanged.
       this.cooldowns[lane] = (1 + (sim.random() - 0.5) * 2 * (s.timingJitter / 100)) / rate;

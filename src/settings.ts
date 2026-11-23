@@ -1,3 +1,4 @@
+import { passThemes } from './pass/pass';
 // The player's own preferences: look, controls and driving aids. They are
 // kept in this browser and have nothing to do with a match's rules.
 
@@ -22,7 +23,10 @@ export type Control =
   | 'fieldCentric'
   | 'camera'
   | 'reset'
-  | 'pause';
+  | 'pause'
+  | 'speed1'
+  | 'speed2'
+  | 'speed3';
 
 /** In the order shown on the settings screen. Driving and turning use the sticks on a gamepad. */
 export const CONTROLS: { id: Control; label: string; stick?: string }[] = [
@@ -42,7 +46,13 @@ export const CONTROLS: { id: Control; label: string; stick?: string }[] = [
   { id: 'camera', label: 'Switch camera' },
   { id: 'reset', label: 'Reset the field' },
   { id: 'pause', label: 'Pause' },
+  { id: 'speed1', label: 'Speed preset 1 (press again for full speed)' },
+  { id: 'speed2', label: 'Speed preset 2 (press again for full speed)' },
+  { id: 'speed3', label: 'Speed preset 3 (press again for full speed)' },
 ];
+
+/** How many speed presets there are, and their starting values in percent of top speed. */
+export const SPEED_PRESETS = [25, 50, 75];
 
 export interface Settings {
   theme: string;
@@ -76,6 +86,19 @@ export interface Settings {
   keys: Record<Control, string>;
   /** Gamepad: a button number for each control, or -1 for none. */
   pad: Record<Control, number>;
+  /** Driving speed presets, in percent of the robot's top speed, for the speed preset keys. */
+  speedPresets: number[];
+  /** Drive Pass: the skin worn by each robot, by robot id. */
+  skins: Record<string, string>;
+  /** Drive Pass: the name colour and the badge shown beside the name, by reward id, or '' for none. */
+  nameColor: string;
+  badge: string;
+  /** Drive Pass: the game piece effect equipped, by reward id, or '' for none. A skin's own effect comes first. */
+  pieceEffect: string;
+  /** Whether fuel effects are drawn at all, on anyone's shots. */
+  showPieceEffects: boolean;
+  /** Drive Pass: every reward this player has unlocked, by reward id, with the season they unlocked it in. */
+  owned: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -94,6 +117,13 @@ export const DEFAULT_SETTINGS: Settings = {
   showControls: true,
   showSpeed: false,
   controlsVersion: 2,
+  speedPresets: [...SPEED_PRESETS],
+  skins: {},
+  nameColor: '',
+  badge: '',
+  pieceEffect: '',
+  showPieceEffects: true,
+  owned: {},
   keys: {
     forward: 'KeyW',
     back: 'KeyS',
@@ -112,6 +142,9 @@ export const DEFAULT_SETTINGS: Settings = {
     camera: 'KeyC',
     reset: 'KeyR',
     pause: 'Escape',
+    speed1: 'Digit1',
+    speed2: 'Digit2',
+    speed3: 'Digit3',
   },
   // Standard layout: 0 A, 1 B, 2 X, 3 Y, 4/5 bumpers, 6/7 triggers, 9 Start, 12 D-pad up.
   pad: {
@@ -131,6 +164,9 @@ export const DEFAULT_SETTINGS: Settings = {
     camera: 5,
     reset: 3,
     pause: 9,
+    speed1: -1,
+    speed2: -1,
+    speed3: -1,
   },
 };
 
@@ -161,6 +197,23 @@ export function readSettings(raw: unknown): Settings {
   result.controlsVersion = DEFAULT_SETTINGS.controlsVersion;
   result.keys = pick(DEFAULT_SETTINGS.keys, current ? result.keys : {});
   result.pad = pick(DEFAULT_SETTINGS.pad, current ? result.pad : {});
+  // Three whole percentages, each from 5 to 100.
+  const presets = Array.isArray(result.speedPresets) ? result.speedPresets : [];
+  result.speedPresets = SPEED_PRESETS.map((fallback, i) => {
+    const value = Number(presets[i]);
+    return Number.isFinite(value) ? Math.round(Math.min(100, Math.max(5, value))) : fallback;
+  });
+  // Skins are kept only as robot id to skin id, both short text.
+  const skins: Record<string, string> = {};
+  for (const [robot, skin] of Object.entries(result.skins ?? {})) {
+    if (typeof skin === 'string' && robot.length <= 80 && skin.length <= 80) skins[robot] = skin;
+  }
+  result.skins = skins;
+  const owned: Record<string, string> = {};
+  for (const [reward, season] of Object.entries(result.owned ?? {}).slice(0, 2000)) {
+    if (typeof season === 'string' && reward.length <= 80 && season.length <= 80) owned[reward] = season;
+  }
+  result.owned = owned;
   result.theme = RENAMED_THEMES[result.theme] ?? result.theme;
   if (!THEMES[result.theme]) result.theme = DEFAULT_SETTINGS.theme;
   result.driverStation = Math.min(3, Math.max(1, Math.round(result.driverStation)));
@@ -241,6 +294,7 @@ export interface Theme {
 /** Palettes that were renamed: the old id, then the id it has now. */
 const RENAMED_THEMES: Record<string, string> = { forest: 'paly', violet: 'mvrt' };
 
+/** Built-in palettes, then the ones that are Drive Pass rewards (offered once unlocked). */
 export const THEMES: Record<string, Theme> = {
   // The grey-blue of a carbon fibre plate.
   srpp: {
@@ -331,6 +385,9 @@ export const THEMES: Record<string, Theme> = {
     },
   },
 };
+
+// Drive Pass themes join the built-in ones, so a saved choice of one is kept.
+Object.assign(THEMES, passThemes());
 
 const CSS_NAMES: Record<keyof Theme['colors'], string> = {
   bg: '--bg',

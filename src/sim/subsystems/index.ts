@@ -4,8 +4,10 @@ import { blockerSpec } from './blocker';
 import { climberSpec } from './climber';
 import { hopperSpec } from './hopper';
 import { intakeSpec } from './intake';
+import { ledSpec } from './led';
 import { shooterSpec } from './shooter';
 import { structureSpec } from './structure';
+import { turnQuat } from './types';
 import type { Subsystem, SubsystemEnv, SubsystemSpec } from './types';
 
 /** Every subsystem type a robot can use. Add new mechanisms here. */
@@ -16,6 +18,7 @@ export const SUBSYSTEM_SPECS: Record<string, SubsystemSpec> = {
   [blockerSpec.type]: blockerSpec,
   [climberSpec.type]: climberSpec,
   [structureSpec.type]: structureSpec,
+  [ledSpec.type]: ledSpec,
 };
 
 /**
@@ -36,13 +39,17 @@ export function createSubsystems(defs: SubsystemDef[], env: SubsystemEnv): Subsy
     }
     const subsystem = spec.create(def, env);
     subsystems.push(subsystem);
-    if (BLOCKED_BY_FIELD.has(spec.type)) {
+    // A see-through structure is only for looks, so not even the field feels it.
+    const lookOnly = spec.type === structureSpec.type && (subsystem as { solid?: boolean }).solid === false;
+    if (BLOCKED_BY_FIELD.has(spec.type) && !lookOnly) {
       // The box cannot pass through field elements (a tall hopper will not fit
       // under the trench), but game pieces and other robots do not feel it.
-      const { size, position } = subsystem.parts[0];
+      const { size, position, yaw, pitch, roll } = subsystem.parts[0];
+      const DEG = 180 / Math.PI;
       env.world.createCollider(
         RAPIER.ColliderDesc.cuboid(size[0] / 2, size[1] / 2, size[2] / 2)
           .setTranslation(position.x, position.y, position.z)
+          .setRotation(turnQuat({ yaw: yaw * DEG, pitch: pitch * DEG, roll: (roll ?? 0) * DEG }))
           .setDensity(0)
           .setFriction(0.25)
           .setCollisionGroups(env.robot.fieldOnlyGroups),

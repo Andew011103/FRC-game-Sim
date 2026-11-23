@@ -103,3 +103,101 @@ $$;
 grant execute on function public.put_room(text, text, text, integer, integer, boolean) to anon, authenticated;
 grant execute on function public.drop_room(text, text) to anon, authenticated;
 grant execute on function public.open_rooms() to anon, authenticated;
+
+-- Tells Supabase's API about new tables and functions straight away.
+notify pgrst, 'reload schema';
+
+-- Added with the Drive Pass's ranking points: the bonus ranking points
+-- (Energized, Supercharged, Traversal) each multiplayer match earned.
+alter table public.match_results add column if not exists bonus_rp integer not null default 0 check (bonus_rp between 0 and 3);
+notify pgrst, 'reload schema';
+
+-- Added with the leaderboards. Each row is one timed singleplayer run with an
+-- official robot, by a signed-in player, in a Drive Pass season. Anyone can
+-- read the runs; a player can only add their own. Ranking is done here, by
+-- each player's best run, so a list can never be padded with one player's runs.
+create table if not exists public.leaderboard_runs (
+  id bigint generated always as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  season_id text not null check (length(season_id) between 1 and 80),
+  robot_id text not null check (length(robot_id) between 1 and 80),
+  score integer not null check (score between 0 and 5000),
+  played_at timestamptz not null default now()
+);
+create index if not exists leaderboard_runs_board on public.leaderboard_runs (season_id, robot_id, score desc);
+alter table public.leaderboard_runs enable row level security;
+drop policy if exists "runs are public" on public.leaderboard_runs;
+create policy "runs are public" on public.leaderboard_runs for select using (true);
+drop policy if exists "players add their own runs" on public.leaderboard_runs;
+create policy "players add their own runs" on public.leaderboard_runs for insert to authenticated with check (user_id = auth.uid());
+
+-- Ranking Points for a first top-3 place in a season's overall board, once a season.
+-- Only the function below can add one, after checking the place itself.
+create table if not exists public.season_awards (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  season_id text not null check (length(season_id) between 1 and 80),
+  place integer not null check (place between 1 and 3),
+  rp integer not null check (rp in (10, 12, 15)),
+  awarded_at timestamptz not null default now(),
+  primary key (user_id, season_id)
+);
+alter table public.season_awards enable row level security;
+drop policy if exists "awards are public" on public.season_awards;
+create policy "awards are public" on public.season_awards for select using (true);
+
+-- A board: each player's best run (for one robot, or any robot when p_robot is null), top 20.
+create or replace function public.leaderboard(p_season text, p_robot text)
+returns table (place bigint, user_id uuid, display_name text, name_color text, badge text, robot_id text, score integer, played_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  with best as (
+    select distinct on (r.user_id) r.user_id, r.robot_id, r.score, r.played_at
+    from public.leaderboard_runs r
+    where r.season_id = p_season and (p_robot is null or r.robot_id = p_robot)
+    order by r.user_id, r.score desc, r.played_at asc
+  )
+  select rank() over (order by b.score desc, b.played_at asc), b.user_id, coalesce(p.display_name, 'Driver'),
+         p.preferences -> 'settings' ->> 'nameColor', p.preferences -> 'settings' ->> 'badge', b.robot_id, b.score, b.played_at
+  from best b left join public.profiles p on p.id = b.user_id
+  order by b.score desc, b.played_at asc
+  limit 20;
+$$;
+
+-- Where a player stands on every board of a season: each robot's, and the overall one (robot_id null).
+create or replace function public.player_rankings(p_user uuid, p_season text)
+returns table (robot_id text, place bigint, score integer)
+language sql stable security definer set search_path = public as $$
+  with best as (
+    select distinct on (r.user_id, r.robot_id) r.user_id, r.robot_id, r.score, r.played_at
+    from public.leaderboard_runs r where r.season_id = p_season
+    order by r.user_id, r.robot_id, r.score desc, r.played_at asc
+  ), per_robot as (
+    select b.user_id, b.robot_id, b.score, rank() over (partition by b.robot_id order by b.score desc, b.played_at asc) as place from best b
+  ), overall_best as (
+    select distinct on (b.user_id) b.user_id, b.score, b.played_at from best b order by b.user_id, b.score desc, b.played_at asc
+  ), overall as (
+    select o.user_id, null::text as robot_id, o.score, rank() over (order by o.score desc, o.played_at asc) as place from overall_best o
+  )
+  select robot_id, place, score from per_robot where user_id = p_user and place <= 20
+  union all
+  select robot_id, place, score from overall where user_id = p_user and place <= 20;
+$$;
+
+-- Called after a run: if the player is now in the season's overall top 3 for the first time, they are given its points.
+create or replace function public.claim_top3(p_season text)
+returns integer language plpgsql security definer set search_path = public as $$
+declare my_place bigint; points integer;
+begin
+  if auth.uid() is null then return 0; end if;
+  if exists (select 1 from public.season_awards where user_id = auth.uid() and season_id = p_season) then return 0; end if;
+  select place into my_place from public.player_rankings(auth.uid(), p_season) where robot_id is null;
+  if my_place is null or my_place > 3 then return 0; end if;
+  points := case my_place when 1 then 15 when 2 then 12 else 10 end;
+  insert into public.season_awards (user_id, season_id, place, rp) values (auth.uid(), p_season, my_place, points)
+  on conflict do nothing;
+  return points;
+end $$;
+
+grant execute on function public.leaderboard(text, text) to anon, authenticated;
+grant execute on function public.player_rankings(uuid, text) to anon, authenticated;
+grant execute on function public.claim_top3(text) to authenticated;
+notify pgrst, 'reload schema';

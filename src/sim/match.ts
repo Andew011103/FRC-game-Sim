@@ -36,6 +36,8 @@ export class Match {
   readonly counts: Record<Alliance, Record<string, number>> = { blue: {}, red: {} };
   /** Points each robot scored itself, by its place in the world's robot list. */
   readonly solo: number[] = [];
+  /** Fouls called so far, newest last: who committed each, whether it was major, and when (match seconds). */
+  readonly fouls: { offender: Alliance; major: boolean; at: number }[] = [];
   /** Seconds left that the robots are held still with the clock stopped. */
   hold = 0;
   holdReason: HoldReason | null = null;

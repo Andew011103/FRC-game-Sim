@@ -145,7 +145,7 @@ describe('polish', () => {
 
   it('the scoreboard is told the fuel toward the next bonus and the part of teleop', () => {
     const sim = new SimWorld(rebuilt2026, { mode: 'match' });
-    expect(sim.rules!.status(sim, 'blue').progress).toEqual({ value: 0, goal: 100 });
+    expect(sim.rules!.status(sim, 'blue').progress).toEqual({ value: 0, goal: 630 });
     expect(sim.rules!.status(sim, 'blue').stage).toBeUndefined();
     run(sim, input(), 20.5);
     expect(sim.rules!.status(sim, 'blue').stage).toEqual({ index: 1, total: 6 });

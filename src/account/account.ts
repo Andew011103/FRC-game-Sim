@@ -1,7 +1,17 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import { readSettings } from '../settings';
 import { findRobot } from '../robots';
-import { EMPTY_STATS, loadStats, recordMatch, withMatch, type FinishedMatch, type PlayerStats } from '../stats';
+import { PASS, inSeason } from '../pass/pass';
+import {
+  EMPTY_STATS,
+  loadSeasonStats,
+  loadStats,
+  recordMatch,
+  recordSeasonMatch,
+  withMatch,
+  type FinishedMatch,
+  type PlayerStats,
+} from '../stats';
 import { useGame } from '../ui/store';
 
 // Accounts live in a Supabase project (set up with supabase/schema.sql).
@@ -11,6 +21,9 @@ import { useGame } from '../ui/store';
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 const supabase: SupabaseClient | null = url && key ? createClient(url, key) : null;
+
+/** The Supabase project, for the leaderboards; null when there is none. */
+export const supabaseClient = (): SupabaseClient | null => supabase;
 
 /** False when the game was built without a Supabase project: there is nothing to sign in to. */
 export const accountsAvailable = supabase !== null;
@@ -27,6 +40,7 @@ const cleanName = (name: unknown): string => (typeof name === 'string' ? name.tr
 /** Starts following who is signed in. Call once when the page loads. */
 export function initAccount(): void {
   useGame.getState().setRecord(loadStats());
+  useGame.getState().setSeasonRecord(loadSeasonStats(PASS.id));
   if (!supabase) return;
   watchPreferences();
   // Supabase must not be called from inside this callback, so the work is put off a moment.
@@ -40,6 +54,8 @@ async function showUser(user: User | null): Promise<void> {
   if (!supabase || !user) {
     state.setAccount(null);
     state.setRecord(loadStats());
+    state.setSeasonRecord(loadSeasonStats(PASS.id));
+    state.setStanding([], 0);
     return;
   }
   if (state.account?.id === user.id) return;
@@ -66,7 +82,11 @@ async function showUser(user: User | null): Promise<void> {
     // The first time on an account, it takes this browser's choices.
     void savePreferences();
   }
-  state.setRecord((await fetchRecord(user.id)) ?? EMPTY_STATS);
+  const records = await fetchRecords(user.id);
+  state.setRecord(records?.all ?? EMPTY_STATS);
+  state.setSeasonRecord(records?.season ?? EMPTY_STATS);
+  // Leaderboard places, champion robots and top-3 Ranking Points.
+  void import('./leaderboard').then(({ refreshStanding }) => refreshStanding());
 }
 
 /** True while choices from the account are being put in place, so they are not sent straight back. */
@@ -77,7 +97,8 @@ function applyPreferences(preferences: Record<string, unknown>, name: string): v
   const state = useGame.getState();
   applying = true;
   try {
-    state.updateSettings({ ...readSettings(preferences.settings), displayName: name });
+    const saved = readSettings(preferences.settings);
+    state.updateSettings({ ...saved, displayName: name, owned: { ...state.settings.owned, ...saved.owned } });
     // A custom robot made on another device is not in this browser; then the robot here stays.
     const robotId = preferences.robotId;
     if (typeof robotId === 'string' && findRobot(robotId, state.customRobots).id === robotId) state.setRobotId(robotId);
@@ -110,6 +131,11 @@ function watchPreferences(): void {
 }
 
 async function fetchRecord(userId: string): Promise<PlayerStats | null> {
+  return (await fetchRecords(userId))?.all ?? null;
+}
+
+/** A player's whole record, and their record for the current Drive Pass season. */
+async function fetchRecords(userId: string): Promise<{ all: PlayerStats; season: PlayerStats } | null> {
   if (!supabase) return null;
   const rows = (columns: string) =>
     supabase
@@ -118,12 +144,14 @@ async function fetchRecord(userId: string): Promise<PlayerStats | null> {
       .eq('user_id', userId)
       .order('played_at', { ascending: false })
       .limit(1000);
-  let { data, error } = await rows('robot, own_score, other_score, kind, solo_score');
+  let { data, error } = await rows('robot, own_score, other_score, kind, solo_score, bonus_rp, played_at');
+  // A database set up before bonus ranking points were recorded lacks that column.
+  if (error) ({ data, error } = await rows('robot, own_score, other_score, kind, solo_score, played_at'));
   // A database set up before singleplayer and solo scores were recorded has only the older columns.
-  if (error) ({ data, error } = await rows('robot, own_score, other_score'));
+  if (error) ({ data, error } = await rows('robot, own_score, other_score, played_at'));
   if (error || !data) return null;
-  return (data as unknown as Record<string, unknown>[]).reduce<PlayerStats>(
-    (stats, row) =>
+  const all = data as unknown as Record<string, unknown>[];
+  const add = (stats: PlayerStats, row: Record<string, unknown>) =>
       withMatch(stats, {
         alliance: 'blue',
         blue: Number(row.own_score) || 0,
@@ -131,9 +159,12 @@ async function fetchRecord(userId: string): Promise<PlayerStats | null> {
         robot: String(row.robot),
         single: row.kind === 'single',
         solo: typeof row.solo_score === 'number' ? row.solo_score : null,
-      }),
-    EMPTY_STATS,
-  );
+        bonusRp: typeof row.bonus_rp === 'number' ? row.bonus_rp : 0,
+      });
+  return {
+    all: all.reduce(add, EMPTY_STATS),
+    season: all.filter((row) => typeof row.played_at === 'string' && inSeason(row.played_at)).reduce(add, EMPTY_STATS),
+  };
 }
 
 /** Another player's name and record, or null if they cannot be read. */
@@ -179,6 +210,7 @@ export async function unlistRoom(code: string, secret: string): Promise<void> {
 export async function fetchRooms(): Promise<OpenRoom[] | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.rpc('open_rooms');
+  if (error) console.warn('Reading the open matches failed:', error.code, error.message);
   if (error || !Array.isArray(data)) return null;
   return (data as Record<string, unknown>[]).map((row) => ({
     code: String(row.code),
@@ -225,12 +257,14 @@ export async function saveMatch(match: SavedMatch): Promise<void> {
   const state = useGame.getState();
   if (!supabase || !state.account) {
     recordMatch(match);
+    recordSeasonMatch(match, PASS.id);
     state.setRecord(loadStats());
+    state.setSeasonRecord(loadSeasonStats(PASS.id));
     return;
   }
   const own = match[match.alliance];
   const other = match[match.alliance === 'blue' ? 'red' : 'blue'];
-  const { error } = await supabase.from('match_results').insert({
+  const row = {
     game: match.game,
     alliance: match.alliance,
     robot: match.robot.slice(0, 40),
@@ -240,13 +274,18 @@ export async function saveMatch(match: SavedMatch): Promise<void> {
     players: match.players,
     kind: match.single ? 'single' : 'multi',
     solo_score: match.solo,
-  });
+  };
+  let { error } = await supabase.from('match_results').insert({ ...row, bonus_rp: match.single ? 0 : (match.bonusRp ?? 0) });
+  // A database set up before bonus ranking points were recorded has no column for them; the match is still saved.
+  if (error) ({ error } = await supabase.from('match_results').insert(row));
   if (error) {
     // Better kept in the browser than lost.
     recordMatch(match);
+    recordSeasonMatch(match, PASS.id);
     console.warn('Saving the match failed:', error.message);
     state.setAccountNote('That match could not be saved to your account, so it was kept in this browser.');
     return;
   }
   state.setRecord(withMatch(useGame.getState().record, match));
+  state.setSeasonRecord(withMatch(useGame.getState().seasonRecord, match));
 }

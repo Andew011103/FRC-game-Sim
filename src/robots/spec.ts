@@ -4,10 +4,30 @@ import type { FieldSpec } from '../sim/subsystems/types';
 // The builder draws its form from these lists, and loading a robot clamps
 // every value to them, so a hand-edited file cannot exceed the limits.
 
+/** Cutting the corners off a box, straight across or rounded. Hidden for round shapes. */
+export const CORNER_FIELDS: FieldSpec[] = [
+  {
+    key: 'cornerStyle',
+    label: 'Corner cuts',
+    kind: 'choice',
+    default: 'chamfer',
+    options: [
+      { value: 'chamfer', label: 'Chamfered: straight across' },
+      { value: 'round', label: 'Rounded' },
+    ],
+    hideIf: 'round',
+  },
+  { key: 'cornerFL', label: 'Front-left corner cut', kind: 'number', default: 0, min: 0, max: 0.4, step: 0.01, unit: 'm', hideIf: 'round' },
+  { key: 'cornerFR', label: 'Front-right corner cut', kind: 'number', default: 0, min: 0, max: 0.4, step: 0.01, unit: 'm', hideIf: 'round' },
+  { key: 'cornerBL', label: 'Back-left corner cut', kind: 'number', default: 0, min: 0, max: 0.4, step: 0.01, unit: 'm', hideIf: 'round' },
+  { key: 'cornerBR', label: 'Back-right corner cut', kind: 'number', default: 0, min: 0, max: 0.4, step: 0.01, unit: 'm', hideIf: 'round' },
+];
+
 export const FRAME_FIELDS: FieldSpec[] = [
   { key: 'length', label: 'Length', kind: 'number', default: 0.7, min: 0.4, max: 0.9, step: 0.01, unit: 'm' },
   { key: 'round', label: 'Round frame (the length is its diameter)', kind: 'boolean', default: false },
   { key: 'width', label: 'Width', kind: 'number', default: 0.7, min: 0.4, max: 0.9, step: 0.01, unit: 'm', hideIf: 'round' },
+  ...CORNER_FIELDS,
   { key: 'height', label: 'Height', kind: 'number', default: 0.24, min: 0.1, max: 0.45, step: 0.01, unit: 'm' },
   { key: 'groundClearance', label: 'Ground clearance', kind: 'number', default: 0.07, min: 0.03, max: 0.12, step: 0.01, unit: 'm' },
   { key: 'mass', label: 'Weight', kind: 'number', default: 55, min: 20, max: 70, step: 1, unit: 'kg' },
@@ -44,3 +64,9 @@ export const DRIVE_FIELDS: Record<'swerve' | 'tank', FieldSpec[]> = {
 export const WHEEL_INSET = 0.07;
 export const WHEEL_RADIUS = 0.05;
 export const MAX_SUBSYSTEMS = 8;
+/** How many parts that are only for looks (LED strips, see-through structures) a robot may have, on top of its subsystems. */
+export const MAX_DECORATIONS = 12;
+
+/** Whether a part is only for looks: an LED strip or a see-through structure. These do not count as subsystems. */
+export const isDecoration = (part: { type: string; solid?: unknown }): boolean =>
+  part.type === 'led' || (part.type === 'structure' && part.solid === false);

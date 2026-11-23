@@ -1,10 +1,11 @@
 import { listRoom, unlistRoom } from '../account/account';
+import { wornSkin } from '../pass/pass';
 import { findRobot } from '../robots';
 import type { RobotDefinition } from '../robots/types';
 import type { SimWorld } from '../sim/world';
 import { useGame, type RoomView } from '../ui/store';
 import { CODE_TAKEN, joinRoom, openRoom, type Link } from './peer';
-import { robotToWire, type ChatLine, type MatchSetup, type Pose, type RoomSettings, type RoomState, type Seat } from './protocol';
+import { robotToWire, type Look, type ChatLine, type MatchSetup, type Pose, type RoomSettings, type RoomState, type Seat } from './protocol';
 import { ClientSession, HostSession, type ClosedBecause } from './session';
 
 /** How long players keep trying to reach the room after its host leaves. */
@@ -43,6 +44,14 @@ class Multiplayer {
 
   constructor() {
     // A robot picked on the robot selector while in a room becomes this player's robot there.
+    // Cosmetics changed on the Drive Pass screen, or a skin picked, reach the room at once.
+    useGame.subscribe((state, previous) => {
+      const { skins, nameColor, badge, pieceEffect } = state.settings;
+      const before = previous.settings;
+      const champion = state.champions !== previous.champions;
+      const changed = skins !== before.skins || nameColor !== before.nameColor || badge !== before.badge || pieceEffect !== before.pieceEffect;
+      if (state.room && (champion || changed)) this.sendLook();
+    });
     useGame.subscribe((state, previous) => {
       if (state.robotId === previous.robotId || !state.room) return;
       const id = this.myId();
@@ -54,6 +63,23 @@ class Multiplayer {
   private me() {
     const { settings, robotId, customRobots, account } = useGame.getState();
     return { name: settings.displayName, robot: findRobot(robotId, customRobots), accountId: account?.id };
+  }
+
+  /** This player's Drive Pass cosmetics. */
+  private look(): Look {
+    const { settings, champions } = useGame.getState();
+    // Champion skins go out only for robots this player is still first on.
+    const skins = Object.fromEntries(
+      Object.keys(settings.skins)
+        .map((robot) => [robot, wornSkin(robot, settings.skins, champions)])
+        .filter((entry): entry is [string, string] => !!entry[1]),
+    );
+    return { skins, nameColor: settings.nameColor, badge: settings.badge, pieceEffect: settings.pieceEffect };
+  }
+
+  /** Tells the room about this player's cosmetics. */
+  private sendLook(): void {
+    this.ask({ type: 'look', look: this.look() });
   }
 
   private myId(): number | null {
@@ -76,7 +102,7 @@ class Multiplayer {
       myId,
       hostId: room.hostId,
       playing: room.playing,
-      players: room.players.map(({ id, name, robot, seat, pose, accountId }) => ({ id, name, robot, seat, pose, accountId })),
+      players: room.players.map(({ id, name, robot, seat, pose, accountId, look }) => ({ id, name, robot, seat, pose, accountId, look })),
       settings: room.settings,
       chat: this.host ? this.host.chat : (this.client?.chat ?? []),
       notice: this.notice,
@@ -125,6 +151,7 @@ class Multiplayer {
     this.code = link.code;
     this.notice = null;
     host.onRoom = () => this.publish();
+    this.sendLook();
     host.onChat = () => this.publish();
     host.onPose = () => this.publish();
     this.publish();
@@ -136,6 +163,7 @@ class Multiplayer {
     this.host = null;
     this.link = link;
     this.code = link.code;
+    this.sendLook();
     client.onRoom = () => {
       this.notice = null;
       this.publish();
@@ -301,7 +329,9 @@ class Multiplayer {
       const { name, robot, accountId } = this.me();
       if (rank !== -1 && waited >= rank * TAKEOVER_STAGGER) {
         const room = oldHostStays ? carry.room : { ...carry.room, players: carry.room.players.filter((p) => p.id !== carry.room.hostId) };
-        const host = new HostSession(name, robot, accountId, { ...carry, room: { ...room, hostId: -1 } });
+        // When the old host has gone, the room is told so as well as who hosts now.
+        const oldHost = oldHostStays ? undefined : carry.room.players.find((p) => p.id === carry.room.hostId)?.name;
+        const host = new HostSession(name, robot, accountId, { ...carry, oldHost, room: { ...room, hostId: -1 } });
         try {
           const link = await openRoom((transport) => host.accept(transport), 0, this.code);
           if (this.left) {

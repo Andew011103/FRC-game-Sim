@@ -235,3 +235,47 @@ describe('match pauses', () => {
     sim.dispose();
   });
 });
+
+describe('hub timing', () => {
+  beforeAll(() => initPhysics());
+
+  it('fuel shot just before a hub turns on counts if it leaves the hub once it is on', () => {
+    const sim = new SimWorld(noHumanPlayer, { mode: 'match' });
+    // Blue outscores red in auto, so blue's hub is dark in shift 1 (30 s to 55 s) and lit again in shift 2.
+    dropInBlueHub(sim, 0);
+    run(sim, input(), 54.7);
+    expect(sim.match!.phase.id).toBe('shift1');
+    expect(sim.rules!.status(sim, 'blue').goalActive).toBe(false);
+    const before = sim.match!.score('blue');
+    // In the air and in the hub as shift 1 ends; out of the hub, scored, once shift 2 has begun.
+    dropInBlueHub(sim, 1);
+    run(sim, input(), 1.5);
+    expect(sim.match!.phase.id).toBe('shift2');
+    expect(sim.match!.score('blue')).toBe(before + 1);
+    sim.dispose();
+  });
+
+  it('fuel comes out of the back of the hub about 3 feet up, spread out', () => {
+    const sim = new SimWorld(noHumanPlayer, { mode: 'match' });
+    const heights: number[] = [];
+    const sideways: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      dropInBlueHub(sim, i);
+      // Watch for it coming out: the first moment it is loose again after being taken in.
+      let taken = false;
+      for (let step = 0; step < 120; step++) {
+        sim.step([]);
+        if (sim.pieces.heldBy[i] !== -1) taken = true;
+        else if (taken) {
+          heights.push(sim.pieces.position(i).y);
+          sideways.push(sim.pieces.bodies[i].linvel().z);
+          break;
+        }
+      }
+    }
+    expect(heights).toHaveLength(6);
+    for (const height of heights) expect(height).toBeGreaterThan(0.8);
+    expect(Math.max(...sideways) - Math.min(...sideways)).toBeGreaterThan(0.2);
+    sim.dispose();
+  });
+});

@@ -5,8 +5,7 @@ import { useGame, type Screen } from './store';
 const ENTRIES: { label: string; screen: Screen | null; note?: string }[] = [
   { label: 'Singleplayer', screen: 'singleplayer' },
   { label: 'Multiplayer', screen: 'multiplayer' },
-  { label: 'Player record', screen: 'record' },
-  { label: 'Leaderboard', screen: null, note: 'Coming later' },
+  { label: 'Leaderboard', screen: 'leaderboard' },
   { label: 'Update logs', screen: 'updates' },
   { label: 'Change game', screen: null, note: 'Coming later' },
   { label: 'Settings', screen: 'settings' },
@@ -19,11 +18,25 @@ export function Home() {
   const ready = useGame((state) => state.ready);
   const account = useGame((state) => state.account);
   const showSignIn = useGame((state) => state.showSignIn);
-  // Without an account linked, the record entry leads to signing in instead.
+  const name = useGame((state) => state.settings.displayName);
+  // Without an account linked, the player button leads to signing in instead.
   const signedOut = accountsAvailable && !account;
 
   return (
     <div className="home">
+      <nav className="home-top">
+        <button className="home-pass" disabled={!ready} onClick={() => setScreen('pass')}>
+          Drive Pass
+        </button>
+        <button
+          className="home-player"
+          disabled={!ready}
+          title={signedOut ? 'Sign in to keep your record on every device' : 'Your record and cosmetics'}
+          onClick={() => (signedOut ? showSignIn() : showRecord(null))}
+        >
+          {signedOut ? 'Sign in' : name.trim() || 'Player'}
+        </button>
+      </nav>
       <div className="home-menu">
         <p className="eyebrow">Robot driving simulator</p>
         <h1>Drive Practice</h1>
@@ -32,11 +45,9 @@ export function Home() {
             key={entry.label}
             className="home-button"
             disabled={entry.screen === null || !ready}
-            onClick={() =>
-              entry.screen === 'record' ? (signedOut ? showSignIn() : showRecord(null)) : entry.screen && setScreen(entry.screen)
-            }
+            onClick={() => entry.screen && setScreen(entry.screen)}
           >
-            <span>{entry.screen === 'record' && signedOut ? 'Sign in' : entry.label}</span>
+            <span>{entry.label}</span>
             {entry.note && <span className="note">{entry.note}</span>}
           </button>
         ))}

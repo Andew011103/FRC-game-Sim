@@ -1,7 +1,9 @@
 import RAPIER, { type Collider } from '@dimforge/rapier3d-compat';
 import { frameTop, outlineOf } from '../../robots/chassis';
+import { boxOutline, hasCuts } from '../../robots/outline';
+import { CORNER_FIELDS } from '../../robots/spec';
 import type { SubsystemDef } from '../../robots/types';
-import { add, rotate, scale, v3, type Vec3 } from '../math';
+import { add, conjugate, rotate, scale, v3, type Vec3 } from '../math';
 import {
   Toggle,
   numberOr,
@@ -23,6 +25,12 @@ type Axis = 'x' | 'y' | 'z';
 
 interface HopperSettings extends Shape {
   round: boolean;
+  openTop: boolean;
+  cornerStyle: 'chamfer' | 'round';
+  cornerFL: number;
+  cornerFR: number;
+  cornerBR: number;
+  cornerBL: number;
   capacity: number;
   expandable: boolean;
   expandDirection: Direction;
@@ -85,11 +93,16 @@ class Hopper implements Subsystem {
   ) {
     const { robot, world } = env;
     const shape = settings.round ? 'cylinder' : 'box';
+    // A hopper with cut corners is drawn, and fills, in its own shape.
+    const outline =
+      !settings.round && hasCuts(settings.sizeX, settings.sizeZ, settings)
+        ? boxOutline(settings.sizeX, settings.sizeZ, settings).map((p) => ({ x: p.x / settings.sizeX, z: p.z / settings.sizeZ }))
+        : undefined;
     this.size = v3(settings.sizeX, settings.sizeY, settings.sizeZ);
     this.center = shapeCenter(settings, robot);
     this.extensionSize = this.size;
     this.extensionCenter = this.center;
-    this.parts = [{ ...shapePart(settings, robot, { opacity: 0.55 }), shape }];
+    this.parts = [{ ...shapePart(settings, robot, { opacity: 0.55 }), shape, outline }];
     const level = (): PartView => ({
       size: [this.size.x, this.size.y, this.size.z],
       color: FILL_COLOR,
@@ -113,7 +126,7 @@ class Hopper implements Subsystem {
       this.apply();
     }
 
-    this.fill = { ...level(), shape };
+    this.fill = { ...level(), shape, outline };
     this.parts.push(this.fill);
     if (settings.expandable) {
       this.extensionFill = level();
@@ -125,12 +138,41 @@ class Hopper implements Subsystem {
     return this.toggle.on;
   }
 
+  get openTop(): boolean {
+    return this.settings.openTop;
+  }
+
+  /** An open top catches loose fuel resting on or falling onto it, as long as the robot has room. */
+  private catchFromAbove({ sim, robot }: SubsystemContext): void {
+    const { pieces } = sim;
+    if (robot.held.length >= robot.capacity()) return;
+    const s = this.settings;
+    const position = robot.position();
+    const unturn = conjugate(robot.rotation());
+    const top = this.center.y + s.sizeY / 2;
+    for (let i = 0; i < pieces.count && robot.held.length < robot.capacity(); i++) {
+      if (pieces.heldBy[i] !== -1) continue;
+      const k = i * 3;
+      // Quick check first: only pieces near the robot are worth turning into its own space.
+      if (Math.abs(pieces.cur[k] - position.x) > 1.5 || Math.abs(pieces.cur[k + 2] - position.z) > 1.5) continue;
+      const local = rotate(unturn, v3(pieces.cur[k] - position.x, pieces.cur[k + 1] - position.y, pieces.cur[k + 2] - position.z));
+      const radius = pieces.radii[i];
+      const over = s.round
+        ? ((local.x - this.center.x) / (s.sizeX / 2)) ** 2 + ((local.z - this.center.z) / (s.sizeZ / 2)) ** 2 <= 1
+        : Math.abs(local.x - this.center.x) <= s.sizeX / 2 && Math.abs(local.z - this.center.z) <= s.sizeZ / 2;
+      const atTop = local.y >= top - radius && local.y <= top + radius * 1.5;
+      // Not a piece being thrown up and away past it.
+      if (over && atTop && pieces.bodies[i].linvel().y <= 0.5) robot.store(sim, i);
+    }
+  }
+
   /** The extra room only counts once the hopper is all the way out. */
   capacity(): number {
     return this.extent >= 1 ? this.settings.expandedCapacity : this.settings.capacity;
   }
 
   step(ctx: SubsystemContext): void {
+    if (this.settings.openTop) this.catchFromAbove(ctx);
     const { robot, input, dt } = ctx;
     const s = this.settings;
     const extra = Math.max(0, s.expandedCapacity - s.capacity);
@@ -240,6 +282,13 @@ export const hopperSpec: SubsystemSpec = {
   fields: [
     ...shapeFields('#475569'),
     { key: 'round', label: 'Round (a drum; length and width are its two diameters)', kind: 'boolean', default: false },
+    {
+      key: 'openTop',
+      label: 'Open top: fuel falling onto it drops straight in (and taking fuel from the hub before it lands is a foul)',
+      kind: 'boolean',
+      default: false,
+    },
+    ...CORNER_FIELDS,
     { key: 'capacity', label: 'Capacity', kind: 'number', default: 20, min: 1, max: 200, step: 1, unit: 'pieces' },
     { key: 'expandable', label: 'Expands', kind: 'boolean', default: false },
     {

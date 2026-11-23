@@ -11,6 +11,11 @@
   "chassis": {
     "length": 0.74,
     "width": 0.66,
+    "cornerStyle": "chamfer",
+    "cornerFL": 0,
+    "cornerFR": 0,
+    "cornerBL": 0,
+    "cornerBR": 0,
     "height": 0.14,
     "groundClearance": 0.07,
     "mass": 55,
@@ -25,10 +30,10 @@
     "wheelBase": 0.6,
     "trackWidth": 0.52,
     "wheelRadius": 0.05,
-    "maxSpeed": 5,
+    "maxSpeed": 5.3,
     "maxAccel": 10,
     "grip": 1.15,
-    "maxAngularSpeed": 9
+    "maxAngularSpeed": 9.5
   },
   "subsystems": [
     {
@@ -56,6 +61,12 @@
       "sizeY": 0.26,
       "color": "#7a8594",
       "round": false,
+      "openTop": true,
+      "cornerStyle": "chamfer",
+      "cornerFL": 0,
+      "cornerFR": 0,
+      "cornerBL": 0,
+      "cornerBR": 0,
       "capacity": 55,
       "expandable": false,
       "expandDirection": "back",
@@ -84,6 +95,7 @@
       "rate": 8.2,
       "spread": 0.8,
       "timingJitter": 75,
+      "aimDelay": 0,
       "moveAccuracy": 90,
       "turret": true,
       "turretSpeed": 930,

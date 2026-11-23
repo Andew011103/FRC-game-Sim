@@ -5,7 +5,7 @@ import { DEFAULT_ROBOT_ID } from '../robots';
 import { loadCustomRobots, saveCustomRobots } from '../robots/custom';
 import type { RobotDefinition } from '../robots/types';
 import { loadSettings, saveSettings, type Quality, type Settings } from '../settings';
-import type { ChatLine, RoomSettings, Seat } from '../net/protocol';
+import type { ChatLine, Look, RoomSettings, Seat } from '../net/protocol';
 import type { MatchMode } from '../sim/match';
 import { EMPTY_STATS, type PlayerStats } from '../stats';
 
@@ -28,6 +28,8 @@ export type Screen =
   | 'multiplayer'
   | 'record'
   | 'signin'
+  | 'pass'
+  | 'leaderboard'
   | 'robots'
   | 'rules'
   | 'settings'
@@ -70,6 +72,8 @@ export interface MatchView {
   holdReason: 'start' | 'pause' | null;
   /** The period before this one, for "Auto over". */
   previousPhase: string | null;
+  /** The latest foul called in the last few seconds, for a brief pop-up. */
+  foul: { offender: Alliance; major: boolean; at: number } | null;
   /** Which part of teleop this is, counted from 1, or null in auto and in practice. */
   stage: { index: number; total: number } | null;
   blue: AllianceView;
@@ -102,6 +106,8 @@ export interface RoomPlayerView {
   /** Where their robot starts, or null for their station's usual spot. */
   pose: StartPose | null;
   accountId?: string;
+  /** Drive Pass cosmetics: skins, name colour and badge, by reward id. */
+  look?: Look;
 }
 
 /** The multiplayer room this player is in, as the interface shows it. */
@@ -141,6 +147,9 @@ export interface MatchResults {
   /** One row per scoring category. */
   rows: { label: string; blue: number; red: number }[];
   bonuses: Bonus[];
+  /** The player's alliance, or null when watching; and whether it was a timed match, which earns Ranking Points. */
+  alliance: Alliance | null;
+  timed: boolean;
 }
 
 interface GameState {
@@ -159,6 +168,9 @@ interface GameState {
   settings: Settings;
   fieldCentric: boolean;
   camera: CameraMode;
+  /** The speed preset driving is held to (0 to 2), or null for full speed. */
+  speedPreset: number | null;
+  setSpeedPreset: (preset: number | null) => void;
   /** True while watching a multiplayer match without a robot in it. */
   watching: boolean;
   /** Which robot a watcher's camera follows, or null for the view from above. */
@@ -179,6 +191,16 @@ interface GameState {
   account: AccountView | null;
   /** The player's multiplayer record: their account's when signed in, otherwise this browser's. */
   record: PlayerStats;
+  /** Robots this player is first on the leaderboard for this season, and Ranking Points from a top-3 overall place. */
+  champions: string[];
+  awardRp: number;
+  setStanding: (champions: string[], awardRp: number) => void;
+  /** What the last leaderboard run earned, for the results screen. */
+  leaderboardNote: string | null;
+  setLeaderboardNote: (note: string | null) => void;
+  /** The player's record for the current Drive Pass season, which its Ranking Points come from. */
+  seasonRecord: PlayerStats;
+  setSeasonRecord: (record: PlayerStats) => void;
   /** Something the player should know about their account, such as a match that could not be saved. */
   accountNote: string | null;
   setAccount: (account: AccountView | null) => void;
@@ -189,6 +211,12 @@ interface GameState {
   /** The screen the record screen goes back to. */
   recordReturn: Screen;
   showRecord: (player: PlayerRef | null) => void;
+  /** The custom robot the builder should open next, if one was picked elsewhere. */
+  builderFocus: string | null;
+  setBuilderFocus: (id: string | null) => void;
+  /** Development only: treat every Drive Pass reward as unlocked, to try them out. */
+  passPreviewAll: boolean;
+  setPassPreviewAll: (all: boolean) => void;
   /** The screen the sign-in screen goes back to. */
   signinReturn: Screen;
   showSignIn: () => void;
@@ -230,6 +258,8 @@ export const useGame = create<GameState>((set) => ({
   settings: initialSettings,
   fieldCentric: initialSettings.fieldCentric,
   camera: initialSettings.defaultCamera,
+  speedPreset: null,
+  setSpeedPreset: (speedPreset) => set({ speedPreset }),
   watching: false,
   watchTarget: null,
   setWatching: (watching, target = null) => set({ watching, watchTarget: watching ? target : null }),
@@ -256,6 +286,13 @@ export const useGame = create<GameState>((set) => ({
   setRoomError: (roomError) => set({ roomError, roomBusy: false }),
   account: null,
   record: EMPTY_STATS,
+  champions: [],
+  awardRp: 0,
+  setStanding: (champions, awardRp) => set({ champions, awardRp }),
+  leaderboardNote: null,
+  setLeaderboardNote: (leaderboardNote) => set({ leaderboardNote }),
+  seasonRecord: EMPTY_STATS,
+  setSeasonRecord: (seasonRecord) => set({ seasonRecord }),
   accountNote: null,
   setAccount: (account) => set({ account, accountNote: null }),
   setRecord: (record) => set({ record }),
@@ -269,6 +306,10 @@ export const useGame = create<GameState>((set) => ({
       // Opening one record from another keeps the way back to where the player started.
       recordReturn: state.screen === 'record' ? state.recordReturn : state.screen,
     })),
+  builderFocus: null,
+  setBuilderFocus: (builderFocus) => set({ builderFocus }),
+  passPreviewAll: false,
+  setPassPreviewAll: (passPreviewAll) => set({ passPreviewAll }),
   signinReturn: 'home',
   showSignIn: () => set((state) => ({ screen: 'signin', signinReturn: state.screen === 'signin' ? state.signinReturn : state.screen })),
   customRobots: loadCustomRobots(),

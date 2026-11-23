@@ -27,6 +27,13 @@ export function takeGoalPieces(sim: SimWorld, goal: Goal): number[] {
 /** Sends a piece a goal took in back onto the field through one of the goal's exits. */
 export function expelGoalPiece(sim: SimWorld, goal: Goal, piece: number): void {
   const exit = goal.exits[Math.floor(sim.random() * goal.exits.length)];
-  const wobble = (sim.random() - 0.5) * 0.8;
-  sim.pieces.release(piece, v3(...exit.position), v3(exit.velocity[0], exit.velocity[1], exit.velocity[2] + wobble));
+  // Each piece comes out a little differently: sideways, faster or slower, higher or lower.
+  const sideways = (sim.random() - 0.5) * 1.0;
+  const speed = 0.75 + sim.random() * 0.5;
+  const lift = (sim.random() - 0.5) * 0.6;
+  sim.pieces.release(
+    piece,
+    v3(...exit.position),
+    v3(exit.velocity[0] * speed, exit.velocity[1] + lift, exit.velocity[2] + sideways),
+  );
 }
