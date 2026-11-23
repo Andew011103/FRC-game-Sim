@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { initAccount } from '../account/account';
-import { PASS, rankingPoints, unlockedIds } from '../pass/pass';
+import { PASS, rankingPoints, seasonMark, unlockedIds } from '../pass/pass';
 import { Game, type EffectWindow, type RobotWindow } from '../game';
 import type { RobotDefinition } from '../robots/types';
 import { applyTheme } from '../settings';
@@ -60,9 +60,10 @@ export function App() {
   const awardRp = useGame((state) => state.awardRp);
   const owned = useGame((state) => state.settings.owned);
   useEffect(() => {
-    const reached = [...unlockedIds(rankingPoints(seasonRecord) + awardRp)].filter((id) => !owned[id]);
+    const mark = seasonMark(PASS);
+    const reached = [...unlockedIds(rankingPoints(seasonRecord) + awardRp)].filter((id) => owned[id] !== mark);
     if (reached.length === 0) return;
-    useGame.getState().updateSettings({ owned: { ...owned, ...Object.fromEntries(reached.map((id) => [id, PASS.id])) } });
+    useGame.getState().updateSettings({ owned: { ...owned, ...Object.fromEntries(reached.map((id) => [id, mark])) } });
   }, [seasonRecord, awardRp, owned]);
 
   // The chosen palette colours the page, and the 3D view's plain background to match.

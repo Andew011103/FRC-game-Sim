@@ -70,6 +70,8 @@ export interface Tier {
 export interface PastSeason {
   id: string;
   name: string;
+  /** When it started; seasons saved before this was kept have none. */
+  startedAt?: string;
   tiers: Tier[];
 }
 
@@ -134,11 +136,29 @@ export function wornSkin(robotId: string, skins: Record<string, string>, champio
   return picked;
 }
 
-/** Every reward there has ever been, with the season it belongs to; the current season first. */
-const ALL_REWARDS: { reward: Reward; season: string }[] = [
-  ...PASS.tiers.map((tier) => ({ reward: tier.reward, season: PASS.id })),
-  ...PASS.champions.map((reward) => ({ reward: reward as Reward, season: PASS.id })),
-  ...PASS.past.flatMap((season) => season.tiers.map((tier) => ({ reward: tier.reward, season: season.id }))),
+/**
+ * What is saved against a reward a player reaches in a season: the season and
+ * when it started. Moving a season's start changes it, so rewards reached under
+ * the old start no longer count as owned.
+ */
+export function seasonMark(season: { id: string; startedAt?: string }): string {
+  if (!season.startedAt || new Date(season.startedAt).getFullYear() <= 2000) return season.id;
+  return `${season.id}@${season.startedAt}`;
+}
+
+/** Whether a player owns a reward: saved with its season's mark, or with anything for an old season saved without a start. */
+function owns(owned: Record<string, string>, id: string, mark: string | null): boolean {
+  const saved = owned[id];
+  return !!saved && (mark === null || saved === mark);
+}
+
+/** Every reward there has ever been, with the season it belongs to and that season's mark; the current season first. */
+const ALL_REWARDS: { reward: Reward; season: string; mark: string | null }[] = [
+  ...PASS.tiers.map((tier) => ({ reward: tier.reward, season: PASS.id, mark: seasonMark(PASS) })),
+  ...PASS.champions.map((reward) => ({ reward: reward as Reward, season: PASS.id, mark: seasonMark(PASS) })),
+  ...PASS.past.flatMap((season) =>
+    season.tiers.map((tier) => ({ reward: tier.reward, season: season.id, mark: season.startedAt ? seasonMark(season) : null })),
+  ),
 ];
 
 /** Whether a match played at this moment counts toward the current season. */
@@ -186,11 +206,13 @@ export function findReward<T extends RewardType>(id: string | null | undefined, 
 export function availableIds(rp: number, owned: Record<string, string>, pass: DrivePass = PASS): Set<string> {
   const ids = unlockedIds(rp, pass);
   const rewards = [
-    ...pass.tiers.map((tier) => ({ reward: tier.reward, season: pass.id })),
-    ...pass.past.flatMap((season) => season.tiers.map((tier) => ({ reward: tier.reward, season: season.id }))),
+    ...pass.tiers.map((tier) => ({ reward: tier.reward, season: pass.id, mark: seasonMark(pass) as string | null })),
+    ...pass.past.flatMap((season) =>
+      season.tiers.map((tier) => ({ reward: tier.reward, season: season.id, mark: season.startedAt ? seasonMark(season) : null })),
+    ),
   ];
-  for (const { reward, season } of rewards) {
-    if (owned[reward.id] && (reward.type !== 'badge' || season === pass.id)) ids.add(reward.id);
+  for (const { reward, season, mark } of rewards) {
+    if (owns(owned, reward.id, mark) && (reward.type !== 'badge' || season === pass.id)) ids.add(reward.id);
   }
   return ids;
 }
@@ -206,7 +228,9 @@ export const allRewardIds = (): Set<string> => new Set(ALL_REWARDS.map((entry) =
 
 /** Rewards kept from earlier seasons that a player owns, to show on the pass screen. Badges are not kept. */
 export const keptRewards = (owned: Record<string, string>): Reward[] =>
-  ALL_REWARDS.filter((entry) => entry.season !== PASS.id && owned[entry.reward.id] && entry.reward.type !== 'badge').map((entry) => entry.reward);
+  ALL_REWARDS.filter((entry) => entry.season !== PASS.id && owns(owned, entry.reward.id, entry.mark) && entry.reward.type !== 'badge').map(
+    (entry) => entry.reward,
+  );
 
 /** The skins made for a robot, in any season. */
 export const skinsFor = (robotId: string) =>

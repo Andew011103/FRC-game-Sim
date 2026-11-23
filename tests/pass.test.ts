@@ -177,6 +177,21 @@ describe('Drive Pass seasons', () => {
     expect(availableIds(3, owned, pass).has('new-badge')).toBe(true);
   });
 
+  it('moving a season start forgets rewards reached before it', async () => {
+    const { availableIds, seasonMark } = await import('../src/pass/pass');
+    const tiers = [{ rp: 10, reward: { type: 'nameColor' as const, id: 'gold', name: 'Gold', color: '#ffcc00' } }];
+    const pass = { id: 'season-1', name: 'Season 1', startedAt: '2026-11-23T08:00:00.000Z', endsAt: '2026-12-23T08:00:00.000Z', champions: [], tiers, past: [] };
+    // Reached when the season still counted every match: saved with the season id alone.
+    expect(availableIds(0, { gold: 'season-1' }, pass).has('gold')).toBe(false);
+    // Reached since the new start.
+    expect(availableIds(0, { gold: seasonMark(pass) }, pass).has('gold')).toBe(true);
+    expect(availableIds(10, {}, pass).has('gold')).toBe(true);
+    // Once that season is over, only what was reached since its start is kept.
+    const next = { ...pass, id: 'season-2', startedAt: '2026-12-23T08:00:00.000Z', tiers: [], past: [{ id: 'season-1', name: 'Season 1', startedAt: pass.startedAt, tiers }] };
+    expect(availableIds(0, { gold: 'season-1' }, next).has('gold')).toBe(false);
+    expect(availableIds(0, { gold: seasonMark(pass) }, next).has('gold')).toBe(true);
+  });
+
   it("this browser's season record starts again in a new season", async () => {
     const store = new Map<string, string>();
     (globalThis as { localStorage?: unknown }).localStorage = {

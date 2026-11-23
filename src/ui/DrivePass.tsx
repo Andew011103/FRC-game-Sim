@@ -257,7 +257,7 @@ function PassEditor({ onDone }: { onDone: () => void }) {
       // Champion skins carry on into the new season, for its new champions.
       champions: pass.champions,
       tiers: [],
-      past: [...pass.past, { id: pass.id, name: pass.name, tiers: pass.tiers }],
+      past: [...pass.past, { id: pass.id, name: pass.name, startedAt: pass.startedAt, tiers: pass.tiers }],
     });
     setNextName('');
     setMessage('New season ready. It starts once you save the pass: everyone\'s Ranking Points begin again from zero.');

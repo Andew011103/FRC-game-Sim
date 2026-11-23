@@ -288,7 +288,67 @@
       }
     },
     {
-      "rp": 225,
+      "rp": 215,
+      "reward": {
+        "type": "skin",
+        "id": "skin-the-crew-mwtn5hox",
+        "name": "The Space CREW",
+        "robotId": "the-crew",
+        "color": "#292654",
+        "recolors": [
+          {
+            "color": "#292654"
+          },
+          {
+            "color": "#342d8f"
+          },
+          {
+            "color": "#292654"
+          }
+        ],
+        "extras": [
+          {
+            "type": "led",
+            "x": 0.6,
+            "z": 0,
+            "bottom": 0.5,
+            "sizeX": 0.03,
+            "sizeZ": 0.74,
+            "sizeY": 0.03,
+            "color": "#fff700",
+            "yaw": 0,
+            "pitch": 0,
+            "roll": 0,
+            "idleColor": "#ddeb24",
+            "idlePattern": "pulse",
+            "idleAccent": "#ffffff",
+            "shootingColor": "#ffdd00",
+            "shootingPattern": "blink",
+            "shootingAccent": "#ffffff",
+            "movingColor": "#b6e633",
+            "movingPattern": "pulse",
+            "movingAccent": "#ffffff",
+            "passingColor": "#f5e10a",
+            "passingPattern": "flash",
+            "passingAccent": "#ffffff",
+            "blockingColor": "#ef4444",
+            "blockingPattern": "flash",
+            "blockingAccent": "#ffffff",
+            "climbingColor": "#a855f7",
+            "climbingPattern": "pulse",
+            "climbingAccent": "#ffffff"
+          }
+        ],
+        "pieceEffect": {
+          "kind": "comet",
+          "color": "#75fdff",
+          "glow": 0.2,
+          "intensity": 0.5
+        }
+      }
+    },
+    {
+      "rp": 250,
       "reward": {
         "type": "badge",
         "id": "badge-season-curie",
