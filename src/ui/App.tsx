@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ShopScreen } from './Shop';
 import { initAccount } from '../account/account';
-import { PASS, rankingPoints, seasonMark, unlockedIds } from '../pass/pass';
+
 import { Game, type EffectWindow, type RobotWindow } from '../game';
 import type { RobotDefinition } from '../robots/types';
 import { applyTheme } from '../settings';
@@ -19,7 +20,7 @@ import { DrivePassScreen } from './DrivePass';
 import { Leaderboard } from './Leaderboard';
 import { SettingsScreen } from './SettingsScreen';
 import { Singleplayer } from './Singleplayer';
-import { Updates } from './Updates';
+import { Changelog } from './Changelog';
 import { useGame } from './store';
 
 /** Shows exactly one screen at a time over the 3D view. */
@@ -55,18 +56,9 @@ export function App() {
 
   useEffect(() => initAccount(), []);
 
-  // Each Drive Pass reward a player reaches is kept in their saved choices, so it stays theirs after the season ends.
-  const seasonRecord = useGame((state) => state.seasonRecord);
-  const awardRp = useGame((state) => state.awardRp);
-  const owned = useGame((state) => state.settings.owned);
-  useEffect(() => {
-    const mark = seasonMark(PASS);
-    const reached = [...unlockedIds(rankingPoints(seasonRecord) + awardRp)].filter((id) => owned[id] !== mark);
-    if (reached.length === 0) return;
-    useGame.getState().updateSettings({ owned: { ...owned, ...Object.fromEntries(reached.map((id) => [id, mark])) } });
-  }, [seasonRecord, awardRp, owned]);
+  // Drive Pass rewards become the player's when they claim them on the Drive Pass screen, and stay theirs after the season ends.
 
-  // The chosen palette colours the page, and the 3D view's plain background to match.
+  // The chosen palette colors the page, and the 3D view's plain background to match.
   useEffect(() => {
     const background = applyTheme(theme);
     if (ready) gameRef.current?.setBackground(background);
@@ -90,14 +82,15 @@ export function App() {
       {screen === 'home' && <Home />}
       {screen === 'singleplayer' && <Singleplayer onStart={start} onWindows={windows} />}
       {screen === 'multiplayer' && <Multiplayer />}
-      {screen === 'record' && <Record />}
+      {screen === 'record' && <Record onWindows={windows} />}
       {screen === 'signin' && <SignIn />}
-      {screen === 'pass' && <DrivePassScreen />}
+      {screen === 'pass' && <DrivePassScreen onWindows={windows} />}
+      {screen === 'shop' && <ShopScreen onWindows={windows} />}
       {screen === 'leaderboard' && <Leaderboard />}
       {screen === 'robots' && <RobotSelect onWindows={windows} onEffectWindows={effectWindows} />}
       {screen === 'rules' && <Rules />}
       {screen === 'settings' && <SettingsScreen />}
-      {screen === 'updates' && <Updates />}
+      {screen === 'changelog' && <Changelog />}
       {screen === 'builder' && <Builder onPreview={preview} onTestDrive={start} />}
       {screen === 'playing' && <Hud />}
       {screen === 'playing' && <Scoreboard />}

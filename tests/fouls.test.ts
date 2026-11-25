@@ -78,8 +78,9 @@ describe('fouls', () => {
 
   it('foul points are only added to the score once the match is over', () => {
     const sim = new SimWorld(rebuilt(), { mode: 'match' });
-    sim.addRobot(plain(), 0, { x: 1.3, z: 2.5, yaw: 0 });
-    sim.addRobot(plain(), 1, { x: 2.5, z: 2.5, yaw: Math.PI });
+    // Clear of the trench's block, so the robot bumped into is not then pinned against it.
+    sim.addRobot(plain(), 0, { x: 0.9, z: 2.5, yaw: 0 });
+    sim.addRobot(plain(), 1, { x: 2.1, z: 2.5, yaw: Math.PI });
     run(sim, input({ driveY: 1 }), 1);
     expect(owedTo(sim, 'red')).toBe(15);
     expect(sim.match!.fouls.at(-1)).toMatchObject({ offender: 'blue', major: true });

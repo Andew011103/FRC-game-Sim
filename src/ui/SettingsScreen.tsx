@@ -7,6 +7,7 @@ import {
   padLabel,
   type Control,
   type PlayCamera,
+  ANGLED_PITCH,
   type QualitySetting,
 } from '../settings';
 import { Dropdown, Slider } from './controls';
@@ -22,9 +23,9 @@ const QUALITY_OPTIONS: { value: QualitySetting; label: string }[] = [
 ];
 
 const CAMERA_OPTIONS: { value: PlayCamera; label: string }[] = [
+  { value: 'angled', label: 'Angled above, from the driver side' },
   { value: 'driver', label: 'Driver station' },
   { value: 'follow', label: 'Follow the robot' },
-  { value: 'top', label: 'Overhead' },
 ];
 
 const STATION_OPTIONS = [
@@ -44,7 +45,16 @@ const HUD_OPTIONS: { key: 'showInfo' | 'showControls' | 'showSpeed'; label: stri
 type Listening = { control: Control; device: 'keys' | 'pad' } | null;
 
 /** The player's preferences: look, sound, driving aids and controls. */
+/** The settings screen's tabs, so nothing needs scrolling to find. */
+const SETTINGS_TABS = [
+  { id: 'display', label: 'Display' },
+  { id: 'account', label: 'Account' },
+  { id: 'game', label: 'Game' },
+  { id: 'controls', label: 'Controls' },
+] as const;
+
 export function SettingsScreen() {
+  const [tab, setTab] = useState<(typeof SETTINGS_TABS)[number]['id']>('display');
   const settings = useGame((state) => state.settings);
   const unlocked = useUnlocked();
   // Drive Pass themes appear once unlocked.
@@ -106,16 +116,24 @@ export function SettingsScreen() {
           Back
         </button>
         <h1>Settings</h1>
+        <div className="toggle-pair screen-tabs" role="tablist" aria-label="Settings">
+          {SETTINGS_TABS.map(({ id, label }) => (
+            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
       </header>
 
       <div className="screen-body columns">
+        {tab === 'display' && (
         <section className="card">
           <h2>Display</h2>
           <div className="fields">
             <div className="field">
-              <span>Colours</span>
+              <span>Colors</span>
               <Dropdown
-                label="Colours"
+                label="Colors"
                 value={settings.theme}
                 options={Object.entries(THEMES)
                   .filter(([value]) => !passThemeIds.has(value) || unlocked.has(value) || value === settings.theme)
@@ -153,6 +171,18 @@ export function SettingsScreen() {
                 }}
               />
             </div>
+            <div className="field">
+              <span>Angled camera tilt</span>
+              <Slider
+                label="Angled camera tilt"
+                value={settings.angledPitch}
+                min={ANGLED_PITCH.least}
+                max={ANGLED_PITCH.most}
+                step={1}
+                onChange={(angledPitch) => update({ angledPitch })}
+              />
+              <span className="field-value">{settings.angledPitch}°</span>
+            </div>
             <label className="field check">
               <input
                 type="checkbox"
@@ -169,9 +199,11 @@ export function SettingsScreen() {
             ))}
           </div>
         </section>
+        )}
 
+        {tab === 'account' && (
         <section className="card">
-          <h2>Player</h2>
+          <h2>Account</h2>
           <div className="fields">
             <label className="field">
               <span>Display name</span>
@@ -193,9 +225,11 @@ export function SettingsScreen() {
             The name is for multiplayer, and the game has no sounds yet, so neither changes anything today.
           </p>
         </section>
+        )}
 
+        {tab === 'game' && (
         <section className="card">
-          <h2>Driving</h2>
+          <h2>Game</h2>
           <div className="fields">
             <label className="field check">
               <input
@@ -241,7 +275,7 @@ export function SettingsScreen() {
               <span>Intake switches on and off with a press, instead of being held</span>
             </label>
           </div>
-          <h2>Speed presets</h2>
+          <h3>Speed presets</h3>
           <p className="hint">
             Keys {settings.speedPresets.map((_, i) => keyLabel(settings.keys[`speed${i + 1}` as 'speed1'])).join(', ')} hold driving to
             these shares of top speed, the same for every robot; press the same key again for full speed. Slower driving makes
@@ -261,7 +295,9 @@ export function SettingsScreen() {
             ))}
           </div>
         </section>
+        )}
 
+        {tab === 'controls' && (
         <section className="card wide">
           <h2>Controls</h2>
           <p className="hint">
@@ -289,6 +325,7 @@ export function SettingsScreen() {
             </button>
           </div>
         </section>
+        )}
       </div>
     </div>
   );

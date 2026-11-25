@@ -38,7 +38,7 @@
   "subsystems": [
     {
       "type": "intake",
-      "x": 0.42,
+      "x": 0.44,
       "z": 0,
       "bottom": 0.05,
       "sizeX": 0.23,
@@ -53,7 +53,7 @@
     },
     {
       "type": "hopper",
-      "x": 0.2,
+      "x": 0.24,
       "z": 0,
       "bottom": 0.22,
       "sizeX": 0.7,
@@ -80,7 +80,7 @@
     },
     {
       "type": "shooter",
-      "x": -0.25,
+      "x": -0.23,
       "z": 0,
       "bottom": 0.22,
       "sizeX": 0.2,
@@ -97,8 +97,9 @@
       "timingJitter": 58,
       "aimDelay": 0.3,
       "moveAccuracy": 60,
-      "turret": false,
-      "turretSpeed": 360,
+      "turret": true,
+      "turretSpeed": 200,
+      "turretRange": 30,
       "autoRange": true,
       "slowInAuto": false,
       "autoRate": 3,

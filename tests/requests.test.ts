@@ -18,11 +18,11 @@ describe('EPA', () => {
     expect(cleanEpa('fast')).toBeUndefined();
   });
 
-  it('is coloured red at the bottom, white at the median, blue at the top quarter and magenta in the top tenth', () => {
+  it('is colored red at the bottom, white at the median, blue at the top quarter and magenta in the top tenth', () => {
     expect(epaColor(10, all)).toBe('#df7a86');
     expect(epaColor(55, all)).toBe('#eff0f4');
     expect(epaColor(100, all)).toBe('#c078f4');
-    // Two robots with the same EPA always share a colour, and a stronger one is never redder.
+    // Two robots with the same EPA always share a color, and a stronger one is never redder.
     expect(epaColor(73.4, all)).toBe(epaColor(73.4, [...all].reverse()));
     expect(epaColor(25, all)).not.toBe(epaColor(35, all));
   });
@@ -327,7 +327,7 @@ describe('turned parts, decorations and game piece effects', () => {
     expect(cleanEffect({ kind: 'flame', color: '#ff0000' })).toEqual({ kind: 'flame', color: '#ff0000' });
     expect(cleanEffect({ kind: 'flame', color: 'red' })).toEqual({ kind: 'flame', color: 'alliance' });
     expect(cleanEffect({ kind: 'explode' })).toBeUndefined();
-    // Fuel colour, glow and intensity are three separate strengths, each kept in its range; ones at their start are left out.
+    // Fuel color, glow and intensity are three separate strengths, each kept in its range; ones at their start are left out.
     expect(cleanEffect({ kind: 'comet', color: '#00ff00', fuelColor: 0.2, glow: 1.5, intensity: 0.433 })).toEqual({
       kind: 'comet',
       color: '#00ff00',
@@ -349,5 +349,37 @@ describe('turned parts, decorations and game piece effects', () => {
     if (reward) expect(dressRobot(robot, null, reward.id).pieceEffect).toBeDefined();
     // Custom robots never carry an effect of their own.
     expect(sanitizeRobot({ chassis: {}, drivetrain: { type: 'swerve' }, subsystems: [], pieceEffect: { kind: 'glow', color: '#ffffff' } })!.pieceEffect).toBeUndefined();
+  });
+});
+
+describe('Team labels and stat bars', () => {
+  it('a team can be a number or a short label, such as Kitbot or 2910 v2', async () => {
+    const { teamOf, cleanTeam } = await import('../src/robots/team');
+    expect(teamOf({ team: '2910 v2' })).toBe('2910 v2');
+    expect(teamOf({ team: 'Kitbot' })).toBe('Kitbot');
+    expect(teamOf({ team: '  971  ' })).toBe('971');
+    expect(cleanTeam('<script>alert(1)</script>')).toBe('scriptalert1');
+    expect(cleanTeam('a very long robot label')!.length).toBeLessThanOrEqual(12);
+    expect(teamOf({ description: '254' })).toBe('254');
+    expect(teamOf({ description: 'A robot' })).toBeUndefined();
+    expect(sanitizeRobot({ chassis: {}, drivetrain: { type: 'swerve' }, subsystems: [], team: '2910 v2' })!.team).toBe('2910 v2');
+  });
+
+  it('stat bars sit where they should, and show nothing for parts the robot lacks', async () => {
+    const { robotStats, scaleFraction, STAT_SCALES } = await import('../src/robots/stats');
+    const at = (value: number, scale: keyof typeof STAT_SCALES) => {
+      const { least, most, bend } = STAT_SCALES[scale];
+      return scaleFraction(value, least, most, bend);
+    };
+    expect(at(50, 'weight')).toBeCloseTo(0.5, 2);
+    expect(at(18, 'fireRate')).toBeCloseTo(0.75, 2);
+    expect(at(70, 'capacity')).toBeCloseTo(0.75, 2);
+    // A small hopper growing is a big step; a large one growing as much is a small step.
+    expect(at(15, 'capacity') - at(10, 'capacity')).toBeGreaterThan(3 * (at(115, 'capacity') - at(110, 'capacity')));
+    expect(at(0.2, 'speed')).toBe(0);
+    expect(at(99, 'speed')).toBe(1);
+    const bare = robotStats(sanitizeRobot({ chassis: {}, drivetrain: { type: 'swerve' }, subsystems: [] })!);
+    const missing = bare.filter((stat) => !stat.applies).map((stat) => stat.label);
+    expect(missing).toEqual(['Fire rate', 'Intake rate', 'Capacity', 'Accuracy', 'Shoot on move']);
   });
 });

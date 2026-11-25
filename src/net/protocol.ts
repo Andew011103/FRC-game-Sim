@@ -5,6 +5,7 @@ import type { Alliance } from '../games/types';
 import { NEUTRAL_INPUT, type DriverInput } from '../input/types';
 import { OFFICIAL_ROBOTS } from '../robots';
 import { sanitizeRobot } from '../robots/custom';
+import { asOfficialSkin } from '../robots/cosmetic';
 import type { RobotDefinition } from '../robots/types';
 import type { MatchMode } from '../sim/match';
 import { SimWorld } from '../sim/world';
@@ -20,7 +21,7 @@ import type { MatchState } from './snapshot';
 // code and everyone else reconnects to them.
 
 /** Raised whenever the messages change, so mismatched versions refuse each other. */
-export const PROTOCOL = 5;
+export const PROTOCOL = 7;
 export const MAX_PER_ALLIANCE = 3;
 /** Robots on the field at once: three a side. */
 export const MAX_PLAYERS = MAX_PER_ALLIANCE * 2;
@@ -63,9 +64,20 @@ export interface RoomSettings {
   /** Whether the room shows in the list of open matches. */
   listed: boolean;
   mode: MatchMode;
+  /** Whether players may use the power-ups they equipped. */
+  powerUps: boolean;
+  /**
+   * Whether players may drive robots of their own. An official robot that a
+   * player only changed the looks of always counts as the official one.
+   */
+  customRobots: boolean;
 }
 
-export const DEFAULT_ROOM_SETTINGS: RoomSettings = { robotRights: 'everyone', listed: true, mode: 'match' };
+export const DEFAULT_ROOM_SETTINGS: RoomSettings = { robotRights: 'everyone', listed: true, mode: 'match', powerUps: true, customRobots: false };
+
+/** Whether a robot may drive in a room with these settings. */
+export const robotAllowed = (robot: RobotDefinition, settings: Pick<RoomSettings, 'customRobots'>): boolean =>
+  settings.customRobots || robot.official;
 
 /** Whether one player may change another's robot under the room's rule. The host always may. */
 export function mayChangeRobot(
@@ -97,13 +109,15 @@ export interface PlayerInfo {
   look?: Look;
 }
 
-/** A player's Drive Pass cosmetics, by reward id: the skin on each robot, their name colour and their badge. */
+/** A player's Drive Pass cosmetics, by reward id: the skin on each robot, their name color and their badge. */
 export interface Look {
   skins: Record<string, string>;
   nameColor: string;
   badge: string;
   /** The game piece effect equipped. */
   pieceEffect?: string;
+  /** The Shop power-up equipped. */
+  powerUp?: string;
 }
 
 /** Cosmetics from another player, kept to short ids. They are only ever looked up in this game's own pass. */
@@ -115,7 +129,7 @@ export function cleanLook(value: unknown): Look | undefined {
   for (const [robot, skin] of Object.entries(look.skins ?? {}).slice(0, 100)) {
     if (id(robot) && id(skin)) skins[robot] = skin as string;
   }
-  return { skins, nameColor: id(look.nameColor), badge: id(look.badge), pieceEffect: id(look.pieceEffect) };
+  return { skins, nameColor: id(look.nameColor), badge: id(look.badge), pieceEffect: id(look.pieceEffect), powerUp: id(look.powerUp) };
 }
 
 export interface ChatLine {
@@ -151,19 +165,27 @@ export interface MatchSetup {
   gameId: string;
   options: Record<string, unknown>;
   mode: MatchMode;
+  /** Whether robots bring their power-ups. */
+  powerUps: boolean;
   seed: number;
   players: (PlayerInfo & { seat: Seat })[];
 }
 
-/** An official robot is sent by its id, so it stays official and cannot be changed on the way; any other robot whole. */
+/**
+ * An official robot is sent by its id, so it stays official and cannot be
+ * changed on the way; any other robot whole. So is an official robot wearing a
+ * player's own looks: whoever gets it checks again that it works exactly like
+ * the official one.
+ */
 export type RobotWire = string | RobotDefinition;
 
-export const robotToWire = (robot: RobotDefinition): RobotWire => (robot.official ? robot.id : robot);
+export const robotToWire = (robot: RobotDefinition): RobotWire => (robot.official && !robot.customSkin ? robot.id : robot);
 
 /** A robot another player sent, checked like an imported file, or null when it cannot be read. */
 export function robotFromWire(wire: unknown): RobotDefinition | null {
   if (typeof wire === 'string') return OFFICIAL_ROBOTS.find((robot) => robot.id === wire) ?? null;
-  return sanitizeRobot(wire);
+  const robot = sanitizeRobot(wire);
+  return robot && asOfficialSkin(robot);
 }
 
 type WirePlayer = Omit<PlayerInfo, 'robot'> & { robot: RobotWire };
@@ -262,12 +284,13 @@ export function setupFromWire(value: unknown): MatchSetup | null {
     gameId: setup.gameId,
     options: setup.options && typeof setup.options === 'object' ? setup.options : {},
     mode: setup.mode === 'practice' ? 'practice' : 'match',
+    powerUps: setup.powerUps === true,
     seed: Number(setup.seed) || 1,
     players: players as MatchSetup['players'],
   };
 }
 
-const BUTTONS: (keyof DriverInput)[] = ['intake', 'outtake', 'shoot', 'deploy', 'block', 'climbUp', 'climbDown'];
+const BUTTONS: (keyof DriverInput)[] = ['intake', 'outtake', 'shoot', 'deploy', 'block', 'climbUp', 'climbDown', 'powerUp'];
 const STICKS = ['driveX', 'driveY', 'turn'] as const;
 
 export function encodeInput(input: DriverInput, prefs: DriverPrefs = DEFAULT_PREFS): ArrayBuffer {
@@ -298,7 +321,7 @@ export function buildNetWorld(setup: MatchSetup): SimWorld {
     const { alliance, station } = player.seat;
     const spawnIndex = Math.max(0, game.spawns.findIndex((spawn) => spawn.alliance === alliance));
     // Each robot wears the skin its player has on it.
-    const robot = dressRobot(player.robot, player.look?.skins[player.robot.id], player.look?.pieceEffect);
+    const robot = dressRobot(player.robot, player.look?.skins[player.robot.id], player.look?.pieceEffect, setup.powerUps ? player.look?.powerUp : null);
     sim.addRobot(robot, spawnIndex, robotStart(game, robot, alliance, player.pose, station));
   }
   return sim;

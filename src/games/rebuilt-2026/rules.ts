@@ -15,9 +15,9 @@ import { HALF_LENGTH, HUB_HEIGHT, OUTPOST, end, hubX } from './field';
 // - Fuel still in flight when a period ends counts for that period if it
 //   scores within 3 seconds. After the end game the robots stop and the
 //   field keeps counting for those 3 seconds.
-// - Hub lights: alliance colour while active, dark while inactive, pulsing
+// - Hub lights: alliance color while active, dark while inactive, pulsing
 //   for the last 3 seconds before it goes inactive or the match ends,
-//   alliance colour with a white light running round during the transition
+//   alliance color with a white light running round during the transition
 //   shift on the hub that will be inactive first, and white while the last
 //   shots are counted after the match.
 // - Tower: level 1 is 15 points in auto (two robots at most) and 10 in

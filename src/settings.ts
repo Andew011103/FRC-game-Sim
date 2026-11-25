@@ -4,7 +4,11 @@ import { passThemes } from './pass/pass';
 
 export type Quality = 'low' | 'medium' | 'high';
 export type QualitySetting = 'auto' | Quality;
-export type PlayCamera = 'driver' | 'follow' | 'top';
+/** How steeply the angled camera may look down, in degrees. */
+export const ANGLED_PITCH = { least: 15, most: 75 } as const;
+
+export type PlayCamera = 'driver' | 'follow' | 'angled';
+const PLAY_CAMERA_IDS: PlayCamera[] = ['angled', 'driver', 'follow'];
 
 /** Everything that can be given a key or a gamepad button. */
 export type Control =
@@ -20,6 +24,7 @@ export type Control =
   | 'deploy'
   | 'block'
   | 'climb'
+  | 'powerUp'
   | 'fieldCentric'
   | 'camera'
   | 'reset'
@@ -42,6 +47,7 @@ export const CONTROLS: { id: Control; label: string; stick?: string }[] = [
   { id: 'deploy', label: 'Expand hopper' },
   { id: 'block', label: 'Blocker' },
   { id: 'climb', label: 'Climb: hold to go up, hold again to come down' },
+  { id: 'powerUp', label: 'Use your power-up' },
   { id: 'fieldCentric', label: 'Switch control mode' },
   { id: 'camera', label: 'Switch camera' },
   { id: 'reset', label: 'Reset the field' },
@@ -74,6 +80,8 @@ export interface Settings {
   toggleIntake: boolean;
   /** Which of the three driver stations the driver-station camera stands at, 1 to 3 from the driver's left. */
   driverStation: number;
+  /** How steeply the angled camera looks down at the robot, in degrees. */
+  angledPitch: number;
   /** The panel with the robot's name, control mode, frame rate and timings. */
   showInfo: boolean;
   /** The list of controls in the corner during a match. */
@@ -82,6 +90,8 @@ export interface Settings {
   showSpeed: boolean;
   /** Raised when the default controls change, so saved ones are replaced once. */
   controlsVersion: number;
+  /** Bumped when the default camera changes, so every player gets the new one once. */
+  cameraVersion: number;
   /** Keyboard: a key code (as in KeyboardEvent.code) for each control. */
   keys: Record<Control, string>;
   /** Gamepad: a button number for each control, or -1 for none. */
@@ -90,13 +100,17 @@ export interface Settings {
   speedPresets: number[];
   /** Drive Pass: the skin worn by each robot, by robot id. */
   skins: Record<string, string>;
-  /** Drive Pass: the name colour and the badge shown beside the name, by reward id, or '' for none. */
+  /** Drive Pass: the name color and the badge shown beside the name, by reward id, or '' for none. */
   nameColor: string;
   badge: string;
   /** Drive Pass: the game piece effect equipped, by reward id, or '' for none. A skin's own effect comes first. */
   pieceEffect: string;
   /** Whether fuel effects are drawn at all, on anyone's shots. */
   showPieceEffects: boolean;
+  /** Shop: the power-up equipped, by reward id, or '' for none. */
+  powerUp: string;
+  /** Whether singleplayer matches allow power-ups. Off by default; a match with them on never goes on the leaderboards. */
+  singlePowerUps: boolean;
   /** Drive Pass: every reward this player has unlocked, by reward id, with the season they unlocked it in. */
   owned: Record<string, string>;
 }
@@ -106,23 +120,27 @@ export const DEFAULT_SETTINGS: Settings = {
   quality: 'auto',
   displayName: 'Driver',
   volume: 0.8,
-  defaultCamera: 'driver',
+  defaultCamera: 'angled',
   fieldCentric: true,
   constantIntake: false,
   autoAim: true,
   toggleShoot: false,
   toggleIntake: false,
   driverStation: 1,
+  angledPitch: 35,
   showInfo: false,
   showControls: true,
   showSpeed: false,
   controlsVersion: 2,
+  cameraVersion: 2,
   speedPresets: [...SPEED_PRESETS],
   skins: {},
   nameColor: '',
   badge: '',
   pieceEffect: '',
   showPieceEffects: true,
+  powerUp: '',
+  singlePowerUps: false,
   owned: {},
   keys: {
     forward: 'KeyW',
@@ -138,6 +156,7 @@ export const DEFAULT_SETTINGS: Settings = {
     // The blocker and the climber share a key: few robots have either, and hardly any have both.
     block: 'KeyK',
     climb: 'KeyK',
+    powerUp: 'KeyG',
     fieldCentric: 'KeyF',
     camera: 'KeyC',
     reset: 'KeyR',
@@ -160,6 +179,7 @@ export const DEFAULT_SETTINGS: Settings = {
     deploy: 0,
     block: 1,
     climb: 12,
+    powerUp: 13,
     fieldCentric: 4,
     camera: 5,
     reset: 3,
@@ -193,6 +213,11 @@ export function readSettings(raw: unknown): Settings {
   }
   const result = settings as unknown as Settings;
   // Controls saved before the defaults last changed are replaced by the new defaults, once.
+  // Everyone starts on the default camera once after it changes; a camera that no longer exists is replaced too.
+  if (saved.cameraVersion !== DEFAULT_SETTINGS.cameraVersion || !PLAY_CAMERA_IDS.includes(result.defaultCamera)) {
+    result.defaultCamera = DEFAULT_SETTINGS.defaultCamera;
+  }
+  result.cameraVersion = DEFAULT_SETTINGS.cameraVersion;
   const current = saved.controlsVersion === DEFAULT_SETTINGS.controlsVersion;
   result.controlsVersion = DEFAULT_SETTINGS.controlsVersion;
   result.keys = pick(DEFAULT_SETTINGS.keys, current ? result.keys : {});
@@ -217,6 +242,9 @@ export function readSettings(raw: unknown): Settings {
   result.theme = RENAMED_THEMES[result.theme] ?? result.theme;
   if (!THEMES[result.theme]) result.theme = DEFAULT_SETTINGS.theme;
   result.driverStation = Math.min(3, Math.max(1, Math.round(result.driverStation)));
+  result.angledPitch = Number.isFinite(result.angledPitch)
+    ? Math.min(ANGLED_PITCH.most, Math.max(ANGLED_PITCH.least, Math.round(result.angledPitch)))
+    : DEFAULT_SETTINGS.angledPitch;
   return result;
 }
 
@@ -272,7 +300,7 @@ export function padLabel(button: number): string {
   return PAD_NAMES[button] ?? `Button ${button}`;
 }
 
-/** A colour palette for the whole interface. Each one sets the same list of CSS variables. */
+/** A color palette for the whole interface. Each one sets the same list of CSS variables. */
 export interface Theme {
   name: string;
   colors: {
@@ -404,7 +432,7 @@ const CSS_NAMES: Record<keyof Theme['colors'], string> = {
   bad: '--bad',
 };
 
-/** Switches the whole interface to a palette. Returns the palette's background colour. */
+/** Switches the whole interface to a palette. Returns the palette's background color. */
 export function applyTheme(id: string): string {
   const theme = THEMES[id] ?? THEMES[DEFAULT_SETTINGS.theme];
   const style = document.documentElement.style;

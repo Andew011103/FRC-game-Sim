@@ -47,9 +47,19 @@ const HUB_EXIT_HEIGHT = 0.95;
 const BUMP = { width: 1.854, depth: 1.128, angle: 15 };
 /**
  * The trench is a bar to drive under: it runs from a block beside the bump out
- * to the side wall.
+ * to the side wall. The block runs as deep as the bump: a column under the bar,
+ * sloping down each side to a short upright face at each end.
  */
-const TRENCH = { clearance: 0.565, opening: 1.266, bar: 0.09, blockHeight: 0.889, blockDepth: 0.5 };
+const TRENCH = {
+  clearance: 0.565,
+  opening: 1.266,
+  bar: 0.09,
+  blockHeight: 0.889,
+  /** How deep the full-height column under the bar is, along the field. */
+  blockDepth: 0.2,
+  /** Height of the upright face at each end of the block. */
+  endHeight: 0.4,
+};
 
 export const RUNGS: [number, number, number] = [0.686, 1.143, 1.6];
 const UPRIGHT = { height: 1.83, thickness: 0.038, depth: 0.089, spacing: 0.819, rungOverhang: 0.149 };
@@ -83,7 +93,7 @@ function hub(alliance: Alliance): BoxElement[] {
   const wall = { color: '#1e293b' };
   const elements: BoxElement[] = [
     { size: [HUB_SIZE, HUB_FLOOR, HUB_SIZE], position: [x, HUB_FLOOR / 2, 0], ...wall },
-    // The alliance-coloured panel round the middle of the box.
+    // The alliance-colored panel round the middle of the box.
     { size: [HUB_SIZE + 0.02, 0.45, HUB_SIZE + 0.02], position: [x, 0.6, 0], color: COLORS[alliance] },
     // Upright sides above the inner floor.
     ...[-1, 1].flatMap((side): BoxElement[] => [
@@ -170,17 +180,48 @@ function bumpsAndTrenches(alliance: Alliance): BoxElement[] {
     );
     const openingZ = side * (HALF_WIDTH - TRENCH.opening / 2);
     elements.push(
-      // The block the bar is fixed to, beside the bump.
-      {
-        size: [TRENCH.blockDepth, TRENCH.blockHeight, blockWidth],
-        position: [x, TRENCH.blockHeight / 2, side * (bumpOuter + blockWidth / 2)],
-        color: DARK_COLORS[alliance],
-      },
+      // The block the bar is fixed to, beside the bump, with its sloped sides.
+      ...trenchBlock(x, side * (bumpOuter + blockWidth / 2), blockWidth, DARK_COLORS[alliance]),
       // The bar robots drive under.
       { size: [TRENCH.bar, TRENCH.bar, TRENCH.opening], position: [x, barY, openingZ], color: COLORS[alliance], lowBar: true },
       // The tag plate standing on the bar.
       { size: [0.03, 0.2, 0.2], position: [x, barY + TRENCH.bar / 2 + 0.1, openingZ], color: '#e5e7eb', lowBar: true },
     );
+  }
+  return elements;
+}
+
+/**
+ * The trench's block, as deep along the field as the bump: a full-height
+ * column under the bar in the middle, and on each side a slope down to a short
+ * upright face, like a rectangle with its top corners cut off at a slant.
+ */
+function trenchBlock(x: number, z: number, widthZ: number, color: string): BoxElement[] {
+  const half = BUMP.depth / 2;
+  const column = TRENCH.blockDepth / 2;
+  const run = half - column;
+  const rise = TRENCH.blockHeight - TRENCH.endHeight;
+  const slope = Math.atan2(rise, run);
+  const length = Math.hypot(run, rise);
+  // Thick enough to fill the triangle under the slope, down to the top of the lower box.
+  const thickness = (rise * run) / length + 0.02;
+  const elements: BoxElement[] = [
+    // The lower part, the full depth of the bump.
+    { size: [BUMP.depth, TRENCH.endHeight, widthZ], position: [x, TRENCH.endHeight / 2, z], color },
+    // The column under the bar.
+    { size: [TRENCH.blockDepth, TRENCH.blockHeight, widthZ], position: [x, TRENCH.blockHeight / 2, z], color },
+  ];
+  for (const side of [-1, 1]) {
+    // A slab whose top face runs from the top of the column down to the top of the end face.
+    const topMiddle = { x: x + side * (column + run / 2), y: TRENCH.endHeight + rise / 2 };
+    // The slab's middle sits half its thickness below the slope, along the slope's upward normal.
+    const normal = { x: side * Math.sin(slope), y: Math.cos(slope) };
+    elements.push({
+      size: [length, thickness, widthZ],
+      position: [topMiddle.x - (normal.x * thickness) / 2, topMiddle.y - (normal.y * thickness) / 2, z],
+      rotation: [0, 0, -side * slope],
+      color,
+    });
   }
   return elements;
 }
@@ -191,7 +232,7 @@ const towerZ = (alliance: Alliance): number => -end(alliance) * TOWER_Z;
 function tower(alliance: Alliance): BoxElement[] {
   const x = towerX(alliance);
   const z = towerZ(alliance);
-  // The frame is in the alliance's colour; the rungs are bare metal.
+  // The frame is in the alliance's color; the rungs are bare metal.
   const color = COLORS[alliance];
   const rungLength = UPRIGHT.spacing + 2 * UPRIGHT.rungOverhang;
   return [

@@ -3,7 +3,8 @@ import RAPIER, { type RigidBody, type World } from '@dimforge/rapier3d-compat';
 import type { Alliance, Spawn } from '../games/types';
 import type { DriverInput } from '../input/types';
 import { bumpersOf, outlineOf } from '../robots/chassis';
-import type { RobotDefinition } from '../robots/types';
+import type { DrivetrainDef, RobotDefinition } from '../robots/types';
+import { NO_BOOST, boostsOf, cleanPowerUp, freshPowerState, type Boosts, type PowerState, type PowerUp } from '../pass/powerups';
 import { swerveCommands } from './drivetrain/swerve';
 import { tankCommands } from './drivetrain/tank';
 import { applyWheelForces, buildRig, type WheelRig, type WheelState } from './drivetrain/wheels';
@@ -37,6 +38,14 @@ export class SimRobot {
   readonly fieldOnlyGroups: number;
   /** True while a climber is holding the robot on a tower; the wheels do nothing. */
   climbing = false;
+  /** The power-up its driver equipped from the Shop, if any. */
+  readonly powerUp: PowerUp | null;
+  /** Where that power-up stands: on, recharging, and uses left this match. */
+  power: PowerState;
+  /** Each stat's multiplier right now: all 1 unless a power-up is on. */
+  boost: Boosts = NO_BOOST;
+  private powerHeld = false;
+  private boostedRig: WheelRig;
 
   /** Pose before the latest step, so the renderer can blend between steps. */
   prevPos: Vec3;
@@ -55,6 +64,9 @@ export class SimRobot {
     const { chassis } = def;
     this.alliance = spawn.alliance;
     this.rig = buildRig(def, dt);
+    this.boostedRig = this.rig;
+    this.powerUp = cleanPowerUp(def.powerUp) ?? null;
+    this.power = freshPowerState(this.powerUp);
     this.wheels = this.rig.mounts.map((localPos) => ({ localPos, steer: 0, grounded: false }));
     this.lastDirs = this.rig.mounts.map(() => v3(1, 0, 0));
 
@@ -185,8 +197,9 @@ export class SimRobot {
     this.prevPos = this.position();
     this.prevRot = this.rotation();
 
+    this.stepPower(input);
     const rot = this.rotation();
-    const drivetrain = this.def.drivetrain;
+    const drivetrain = this.drivetrain();
     const drive = this.aimedInput(sim, input);
     const commands =
       drivetrain.type === 'swerve'
@@ -198,7 +211,7 @@ export class SimRobot {
             lastDirs: this.lastDirs,
           })
         : tankCommands(drivetrain, drive, rot, this.rig.mounts);
-    if (!this.climbing) applyWheelForces(sim.world, this.body, this.rig, commands, this.wheels, this.dt);
+    if (!this.climbing) applyWheelForces(sim.world, this.body, this.boostedRig, commands, this.wheels, this.dt);
 
     for (const subsystem of this.subsystems) subsystem.step({ sim, robot: this, input, dt: this.dt });
   }
@@ -212,7 +225,7 @@ export class SimRobot {
     for (const subsystem of this.subsystems) {
       const rate = subsystem.chassisTurn?.({ sim, robot: this, input, dt: this.dt });
       if (rate === null || rate === undefined) continue;
-      const drivetrain = this.def.drivetrain;
+      const drivetrain = this.drivetrain();
       if (drivetrain.type === 'swerve') {
         return { ...input, turn: clamp(-rate / drivetrain.maxAngularSpeed, -1, 1) };
       }
@@ -223,8 +236,59 @@ export class SimRobot {
     return input;
   }
 
+  /** The drivetrain as it drives right now: faster or quicker to turn while a power-up boosts it. */
+  drivetrain(): DrivetrainDef {
+    const drivetrain = this.def.drivetrain;
+    const boost = this.boost;
+    if (boost === NO_BOOST) return drivetrain;
+    return drivetrain.type === 'swerve'
+      ? { ...drivetrain, maxSpeed: drivetrain.maxSpeed * boost.driveSpeed, maxAngularSpeed: drivetrain.maxAngularSpeed * boost.turnSpeed }
+      : { ...drivetrain, maxSpeed: drivetrain.maxSpeed * boost.driveSpeed, turnScale: (drivetrain.turnScale ?? 0.6) * boost.turnSpeed };
+  }
+
+  /**
+   * Counts the power-up's time down, and switches it on when its key is newly
+   * pressed while it is ready: not on, recharged, and with uses left.
+   */
+  private stepPower(input: DriverInput): void {
+    const power = this.power;
+    if (power.active > 0) {
+      power.active = Math.max(0, power.active - this.dt);
+      if (power.active === 0) {
+        power.cooldown = this.powerUp?.cooldown ?? 0;
+        this.setBoost(NO_BOOST);
+      }
+    } else {
+      power.cooldown = Math.max(0, power.cooldown - this.dt);
+    }
+    const pressed = input.powerUp && !this.powerHeld;
+    this.powerHeld = input.powerUp;
+    if (pressed && this.powerUp && power.active === 0 && power.cooldown === 0 && power.usesLeft > 0) {
+      power.active = this.powerUp.duration;
+      power.usesLeft -= 1;
+      this.setBoost(boostsOf(this.powerUp));
+    }
+  }
+
+  private setBoost(boost: Boosts): void {
+    this.boost = boost;
+    // Stronger motors, a higher top speed and more grip, for the wheels.
+    this.boostedRig =
+      boost === NO_BOOST
+        ? this.rig
+        : {
+            ...this.rig,
+            stallForce: this.rig.stallForce * boost.acceleration,
+            freeSpeed: this.rig.freeSpeed * boost.driveSpeed,
+            grip: this.rig.grip * boost.traction,
+          };
+  }
+
   /** Puts the robot back on its starting spot, upright and stopped. Held pieces stay held. */
   reset(): void {
+    this.power = freshPowerState(this.powerUp);
+    this.powerHeld = false;
+    this.setBoost(NO_BOOST);
     for (const subsystem of this.subsystems) subsystem.reset();
     const start = this.startPose();
     this.body.setTranslation(start.pos, true);

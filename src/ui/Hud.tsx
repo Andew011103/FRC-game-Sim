@@ -1,11 +1,13 @@
 import { findRobot } from '../robots';
 import type { RobotDefinition } from '../robots/types';
 import { keyLabel, padLabel, type Control } from '../settings';
-import { useGame } from './store';
+import { useGame, type Telemetry } from './store';
+import { PowerMark } from './DrivePass';
 
 const CAMERA_LABELS: Record<string, string> = {
   driver: 'Driver station',
   follow: 'Follow',
+  angled: 'Angled above',
   top: 'Overhead',
 };
 
@@ -56,6 +58,7 @@ export function Hud() {
       <FoulPopup />
       <SpeedCap />
       <div className="hud-bottom-left">
+        {telemetry.power && <PowerPanel power={telemetry.power} control={telemetry.gamepad ? padLabel(settings.pad.powerUp) : keyLabel(settings.keys.powerUp)} />}
         {telemetry.climbLevel > 0 && <div className="panel hud-climb">Tower level {telemetry.climbLevel}</div>}
         {telemetry.capacity > 0 && (
           <div className="panel hud-held">
@@ -183,4 +186,39 @@ function SpeedCap() {
   const presets = useGame((state) => state.settings.speedPresets);
   if (preset === null) return null;
   return <div className="panel hud-speed-cap">Speed {presets[preset]}%</div>;
+}
+
+/** The power-up the robot carries: ready to use, on, recharging, or used up for this match. */
+function PowerPanel({ power, control }: { power: NonNullable<Telemetry['power']>; control: string }) {
+  const state = power.active > 0 ? 'on' : power.usesLeft === 0 ? 'spent' : power.cooldown > 0 ? 'recharging' : 'ready';
+  const fill = state === 'on' ? power.active / power.duration : state === 'ready' ? 1 : 0;
+  return (
+    <div
+      className={`panel hud-power ${state}`}
+      style={{ '--power': power.color, '--fill': `${Math.round(fill * 360)}deg` } as React.CSSProperties}
+    >
+      <span className="hud-power-mark">
+        <PowerMark power={power} />
+      </span>
+      <span className="hud-power-text">
+        <strong>
+          {state === 'on'
+            ? `On · ${power.active.toFixed(1)} s`
+            : state === 'spent'
+              ? 'Used up this match'
+              : state === 'recharging'
+                ? `Recharging · ${Math.ceil(power.cooldown)} s`
+                : 'Power-up ready'}
+        </strong>
+        <span className="muted">
+          {state === 'ready' && (
+            <>
+              <kbd>{control}</kbd> to use ·{' '}
+            </>
+          )}
+          {power.usesLeft === null ? 'no limit' : `${power.usesLeft} left`}
+        </span>
+      </span>
+    </div>
+  );
 }

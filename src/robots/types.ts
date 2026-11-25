@@ -82,9 +82,21 @@ export interface RobotDefinition {
    * Set while a Drive Pass skin is being made in the builder: the official
    * robot it dresses up, the reward it is saved as, and the Ranking Points it needs.
    */
-  skinOf?: { robotId: string; rewardId: string; rp: number; champion?: boolean };
+  skinOf?: { robotId: string; rewardId: string; rp: number; champion?: boolean; shop?: boolean };
   /** Drive Pass: how fuel this robot shoots looks in the air. Only ever set by a skin or an equipped reward. */
   pieceEffect?: { kind: string; color: string; fuelColor?: number; glow?: number; intensity?: number };
+  /** Shop: the power-up the player equipped, switched on with a key in a match. Only ever set when the robot is brought to a match. */
+  powerUp?: import('../pass/powerups').PowerUp;
+  /**
+   * Set on an official robot that a player dressed up in the builder, changing
+   * only its looks: it plays as the official robot, and is sent whole so
+   * others see its looks. Never read from a file or another player.
+   */
+  customSkin?: boolean;
+  /** Official robots: whether the selector tags it as having two intakes. Left out, it goes by its parts. */
+  dualIntake?: boolean;
+  /** Official robots: whether the selector tags it as having two turrets. Left out, it goes by its parts. */
+  doubleTurret?: boolean;
   /** How strong the robot is, 0.0 to 100.0. Set for official robots only, so multiplayer alliances can be made even. */
   epa?: number;
   /**

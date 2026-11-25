@@ -51,7 +51,7 @@ export class PieceEffects {
   private readonly sizes: Float32Array;
   private readonly material: THREE.ShaderMaterial;
   private readonly haloCount: number;
-  /** Which pieces were last drawn in an effect colour, to put them back. */
+  /** Which pieces were last drawn in an effect color, to put them back. */
   private readonly tinted: Uint8Array;
   private readonly baseColors: THREE.Color[];
   private readonly lastPos: Float32Array;
@@ -146,7 +146,7 @@ export class PieceEffects {
       let ball: THREE.Color | null = scratchB.copy(color);
       let halo = 8 * r;
       let level = 1;
-      // Three separate strengths: how much of the colour the fuel itself takes on, how bright and big
+      // Three separate strengths: how much of the color the fuel itself takes on, how bright and big
       // the glow around it is, and how strong the trail or sparks are.
       const scales = effectScales(effect);
       const power = scales.intensity;
@@ -172,7 +172,7 @@ export class PieceEffects {
           ball = scratchB.copy(color);
           break;
         case 'flame': {
-          // Hot at the core, burning off in the effect's colour.
+          // Hot at the core, burning off in the effect's color.
           ball = scratchB.copy(color).lerp(WARM, 0.55);
           halo = 4.5 * r;
           this.emitAlong(i, x, y, z, 40 * power * dt, r, color, 'flame', 0.22, 0.36, [2.2 * r * grow, 3.6 * r * grow], 0.4, 0.5);
@@ -187,7 +187,7 @@ export class PieceEffects {
           this.emitAlong(i, x, y, z, 80 * power * dt, r, color, 'twinkle', 0.5, 0.8, [2.4 * r * grow, 0.8 * r], 0.8, 0);
           break;
         case 'electric': {
-          // A crackle: flickering brightness and sudden bursts of quick white and coloured sparks.
+          // A crackle: flickering brightness and sudden bursts of quick white and colored sparks.
           level = 0.4 + 0.6 * Math.random();
           if (Math.random() < 0.35) ball = scratchB.set('#ffffff');
           halo = r * (5 + 5 * Math.random());
@@ -218,7 +218,7 @@ export class PieceEffects {
           break;
       }
 
-      // The fuel itself takes on only as much of the colour as its fuel colour setting says.
+      // The fuel itself takes on only as much of the color as its fuel color setting says.
       if (ball) {
         const tint = scales.fuelColor;
         ball = scratchC.copy(this.baseColors[i]).lerp(ball, tint).multiplyScalar(1 + 0.3 * tint * level);
@@ -313,7 +313,7 @@ export class PieceEffects {
       let fade = 1 - f;
       let [r, g, b] = [s.color[j * 3], s.color[j * 3 + 1], s.color[j * 3 + 2]];
       if (s.style[j] === 'flame') {
-        // Yellow-white at first, through the flame's colour, to nothing.
+        // Yellow-white at first, through the flame's color, to nothing.
         const hot = Math.max(0, 1 - f * 2.5);
         r = r + (1 - r) * hot;
         g = g + (0.9 - g) * hot;

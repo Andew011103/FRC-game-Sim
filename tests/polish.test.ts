@@ -189,7 +189,7 @@ describe('polish', () => {
     const robot = sanitizeRobot({ chassis: {}, drivetrain: {}, team: '1323', icon })!;
     expect(robot.team).toBe('1323');
     expect(robot.icon).toBe(icon);
-    const bad = sanitizeRobot({ chassis: {}, drivetrain: {}, team: '12ab', icon: 'https://example.com/a.png' })!;
+    const bad = sanitizeRobot({ chassis: {}, drivetrain: {}, team: '<>', icon: 'https://example.com/a.png' })!;
     expect(bad.team).toBeUndefined();
     expect(bad.icon).toBeUndefined();
   });

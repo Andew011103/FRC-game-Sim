@@ -10,6 +10,7 @@ import { robotStats, robotTags } from '../robots/stats';
 import { EpaTag } from './Epa';
 import type { RobotDefinition } from '../robots/types';
 import { useGame } from './store';
+import { asOfficialSkin } from '../robots/cosmetic';
 
 interface Props {
   /** Tells the 3D view which robots to draw in which boxes on this screen. */
@@ -38,7 +39,11 @@ export function RobotSelect({ onWindows, onEffectWindows }: Props) {
   const robots = useMemo(() => {
     const byName = (a: RobotDefinition, b: RobotDefinition) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     // By number, robots without one come last, in name order.
-    const number = (robot: RobotDefinition) => (robot.team ? Number(robot.team) : Infinity);
+    // A label such as "2910 v2" sorts by its number; one with none, such as "Kitbot", after every number.
+    const number = (robot: RobotDefinition) => {
+      const leading = robot.team ? parseInt(robot.team, 10) : NaN;
+      return Number.isFinite(leading) ? leading : Infinity;
+    };
     // By EPA, strongest first; robots without one come last, in name order.
     const epa = (robot: RobotDefinition) => epaOf(robot) ?? -Infinity;
     return [...OFFICIAL_ROBOTS, ...customRobots].sort((a, b) => {
@@ -116,7 +121,11 @@ export function RobotSelect({ onWindows, onEffectWindows }: Props) {
               <span className="robot-tile-name">{robot.name}</span>
               {teamNumber(robot) && <span className="robot-tile-number">{teamNumber(robot)}</span>}
               <span className="robot-tags">
-                {!robot.official && <span className="custom-tag">Custom</span>}
+                {!robot.official && (
+                  <span className="custom-tag" title={asOfficialSkin(robot).official ? 'Only its looks differ, so it plays and ranks as the official robot' : undefined}>
+                    {asOfficialSkin(robot).official ? `Custom skin: ${asOfficialSkin(robot).name}` : 'Custom'}
+                  </span>
+                )}
                 {robotTags(robot, lowBar).map((tag) => (
                   <span key={tag}>{tag}</span>
                 ))}
@@ -180,10 +189,10 @@ export function RobotSelect({ onWindows, onEffectWindows }: Props) {
           )}
           <div className="stats">
             {stats.map((stat) => (
-              <div className="stat" key={stat.label}>
+              <div className={`stat${stat.applies ? '' : ' not-applicable'}`} key={stat.label}>
                 <span className="stat-label">{stat.label}</span>
                 <div className="stat-bar" role="img" aria-label={`${stat.label}: ${stat.text}`}>
-                  <div className={barColor(stat.fraction)} style={{ width: `${Math.max(1, stat.fraction * 100)}%` }} />
+                  {stat.applies && <div className={barColor(stat.fraction)} style={{ width: `${Math.max(1, stat.fraction * 100)}%` }} />}
                 </div>
                 <span className="stat-value">{stat.text}</span>
               </div>

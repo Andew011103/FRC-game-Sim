@@ -9,8 +9,13 @@
       "reward": {
         "type": "nameColor",
         "id": "name-wood",
-        "name": "Wood name",
-        "color": "#b2956c"
+        "name": "Wood Name",
+        "color": "#b2956c",
+        "gradient": [
+          "#a08764",
+          "#caaa7d",
+          "#9a866a"
+        ]
       }
     },
     {
@@ -32,7 +37,7 @@
       }
     },
     {
-      "rp": 45,
+      "rp": 40,
       "reward": {
         "type": "theme",
         "id": "theme-mttd",
@@ -51,6 +56,15 @@
           "warn": "#d39a36",
           "bad": "#cf4a4a"
         }
+      }
+    },
+    {
+      "rp": 50,
+      "reward": {
+        "type": "rivets",
+        "id": "rivets-s1-40",
+        "name": "50 Rivets",
+        "amount": 50
       }
     },
     {
@@ -245,6 +259,15 @@
       }
     },
     {
+      "rp": 100,
+      "reward": {
+        "type": "rivets",
+        "id": "rivets-s1-100",
+        "name": "75 Rivets",
+        "amount": 75
+      }
+    },
+    {
       "rp": 120,
       "reward": {
         "type": "led",
@@ -285,6 +308,15 @@
           "warn": "#e08a30",
           "bad": "#d9534f"
         }
+      }
+    },
+    {
+      "rp": 200,
+      "reward": {
+        "type": "rivets",
+        "id": "rivets-s1-200",
+        "name": "100 Rivets",
+        "amount": 100
       }
     },
     {
@@ -349,6 +381,33 @@
     },
     {
       "rp": 250,
+      "reward": {
+        "type": "nameColor",
+        "id": "namecolor-epa",
+        "name": "EPA Gradient",
+        "color": "#c078f4",
+        "gradient": [
+          "#8ca3f2",
+          "#bcebc8",
+          "#df7a86"
+        ],
+        "edge": "glow",
+        "outline": "",
+        "effect": "glare",
+        "speed": 2
+      }
+    },
+    {
+      "rp": 300,
+      "reward": {
+        "type": "rivets",
+        "id": "rivets-s1-300",
+        "name": "150 Rivets",
+        "amount": 150
+      }
+    },
+    {
+      "rp": 300,
       "reward": {
         "type": "badge",
         "id": "badge-season-curie",

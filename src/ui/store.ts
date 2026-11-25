@@ -29,17 +29,19 @@ export type Screen =
   | 'record'
   | 'signin'
   | 'pass'
+  | 'shop'
   | 'leaderboard'
   | 'robots'
   | 'rules'
   | 'settings'
-  | 'updates'
+  | 'changelog'
   | 'builder'
   | 'playing'
   | 'paused'
   | 'results';
 
-export const PLAY_CAMERAS: CameraMode[] = ['driver', 'follow', 'top'];
+/** The cameras a driver switches between. Watchers also get a view from above. */
+export const PLAY_CAMERAS: CameraMode[] = ['angled', 'driver', 'follow'];
 
 export interface Telemetry {
   speed: number;
@@ -50,6 +52,8 @@ export interface Telemetry {
   held: number;
   capacity: number;
   climbLevel: number;
+  /** The power-up the robot carries, and where it stands, or null for none. */
+  power: { icon: string; image?: string; color: string; duration: number; active: number; cooldown: number; usesLeft: number | null } | null;
   /** Milliseconds per frame spent on physics and on issuing draw commands. */
   simMs: number;
   drawMs: number;
@@ -106,7 +110,7 @@ export interface RoomPlayerView {
   /** Where their robot starts, or null for their station's usual spot. */
   pose: StartPose | null;
   accountId?: string;
-  /** Drive Pass cosmetics: skins, name colour and badge, by reward id. */
+  /** Drive Pass cosmetics: skins, name color and badge, by reward id. */
   look?: Look;
 }
 
@@ -270,6 +274,7 @@ export const useGame = create<GameState>((set) => ({
     gamepad: false,
     held: 0,
     capacity: 0,
+    power: null,
     climbLevel: 0,
     simMs: 0,
     drawMs: 0,

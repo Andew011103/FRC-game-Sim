@@ -4,7 +4,8 @@ import { configuredGame } from '../games';
 import { robotStart } from '../games/start';
 import type { Alliance } from '../games/types';
 import { CODE_LENGTH, cleanCode } from '../net/peer';
-import { CHAT_LENGTH, MAX_IN_ROOM, MAX_PER_ALLIANCE, mayChangeRobot, type RobotRights, type Seat } from '../net/protocol';
+import { CHAT_LENGTH, MAX_IN_ROOM, MAX_PER_ALLIANCE, mayChangeRobot, robotAllowed, type RobotRights, type Seat } from '../net/protocol';
+import { asOfficialSkin } from '../robots/cosmetic';
 import { multiplayer } from '../net/room';
 import { OFFICIAL_ROBOTS } from '../robots';
 import { epaOf } from '../robots/epa';
@@ -61,7 +62,6 @@ function Entrance({ busy, error }: { busy: boolean; error: string | null }) {
   return (
     <div className="screen-body entrance">
       <div className="entrance-left">
-        <RecordCard />
         <section className="card">
           <h2>Host a match</h2>
           <p className="hint">You get a room code to share. If you leave, another player takes the room over and the match carries on.</p>
@@ -85,6 +85,7 @@ function Entrance({ busy, error }: { busy: boolean; error: string | null }) {
           {busy && <p className="hint">Connecting…</p>}
           {error && <p className="hint lobby-error">{error}</p>}
         </section>
+        <RecordCard />
       </div>
       <section className="card">
         {accountsAvailable ? (
@@ -209,6 +210,8 @@ function Room({ room }: { room: RoomView }) {
   const isHost = room.role === 'host';
   const [tab, setTab] = useState<'chat' | 'start'>('chat');
   const seated = room.players.filter((player) => player.seat).length;
+  // Seated players whose custom robots this room does not allow: the match waits for them to pick another.
+  const barred = room.players.filter((player) => player.seat && !robotAllowed(player.robot, room.settings));
   const spectators = room.players.filter((player) => !player.seat);
 
   return (
@@ -286,7 +289,13 @@ function Room({ room }: { room: RoomView }) {
             <button className="secondary" onClick={() => setScreen('rules')}>
               Rules
             </button>
-            <button className="primary" disabled={seated === 0} onClick={() => multiplayer.start()}>
+            {barred.length > 0 && (
+              <span className="hint lobby-error">
+                Custom robots are off: {barred.map((player) => player.name).join(', ')} must pick an official robot, or allow custom
+                robots in the rules.
+              </span>
+            )}
+            <button className="primary" disabled={seated === 0 || barred.length > 0} onClick={() => multiplayer.start()}>
               Start match
             </button>
           </>
@@ -397,12 +406,24 @@ function PlayerChip({ room, player }: { room: RoomView; player: RoomPlayerView }
             {choices.map((robot) => (
               <option key={robot.id} value={robot.id}>
                 {robot.name}
-                {robot.official ? '' : ' (custom)'}
+                {robot.official
+                  ? ''
+                  : asOfficialSkin(robot).official
+                    ? ` (custom skin: ${asOfficialSkin(robot).name})`
+                    : room.settings.customRobots
+                      ? ' (custom)'
+                      : ' (custom, not allowed here)'}
               </option>
             ))}
           </select>
         ) : (
           <span className="muted">{player.robot.name}</span>
+        )}
+        {player.robot.customSkin && <span className="custom-tag" title="An official robot in this player's own looks">Custom skin</span>}
+        {!robotAllowed(player.robot, room.settings) && (
+          <span className="custom-tag barred" title="This room only allows official robots">
+            Not allowed
+          </span>
         )}
       </div>
       {isHost && !mine && (
@@ -476,13 +497,13 @@ function Chat({ room }: { room: RoomView }) {
         {room.chat.length === 0 && <li className="muted">No messages yet.</li>}
         {room.chat.map((line, i) =>
           line.system ? (
-            // A note from the room itself, in its own colour and without a name.
+            // A note from the room itself, in its own color and without a name.
             <li key={i} className="system">
               {line.text}
             </li>
           ) : (
             <li key={i} className={line.from === room.myId ? 'mine' : ''}>
-              {/* The sender's name in their Drive Pass colour, with their badge; plain if they have left. */}
+              {/* The sender's name in their Drive Pass color, with their badge; plain if they have left. */}
               <strong>
                 <PlayerName player={room.players.find((player) => player.id === line.from) ?? { name: line.name }} />
               </strong>{' '}

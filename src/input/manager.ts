@@ -23,6 +23,8 @@ export class InputManager {
   gamepadConnected = false;
 
   private readonly keys = new Set<string>();
+  /** Keys pressed since the last read, so a tap shorter than a frame still counts once. */
+  private readonly tapped = new Set<string>();
   private padButtons: boolean[] = [];
   /** For controls set to switch on and off with a press: whether each was down last frame, and whether it is on. */
   private readonly wasDown: Partial<Record<Control, boolean>> = {};
@@ -55,7 +57,9 @@ export class InputManager {
     const pressed = this.readGamepad();
     const pad = navigator.getGamepads?.().find((p) => p !== null && p.connected) ?? null;
     const held = (control: Control): boolean =>
-      this.keys.has(bound[control]) || (buttons[control] >= 0 && (pressed[buttons[control]] ?? false));
+      this.keys.has(bound[control]) ||
+      this.tapped.has(bound[control]) ||
+      (buttons[control] >= 0 && (pressed[buttons[control]] ?? false));
     /** A held control, or one that each press switches on or off. */
     const switched = (control: Control, toggle: boolean): boolean => {
       const down = held(control);
@@ -74,7 +78,7 @@ export class InputManager {
     const stickY = -shape(pad?.axes[1] ?? 0);
     const stickTurn = shape(pad?.axes[2] ?? 0);
     const sticks = stickX !== 0 || stickY !== 0 || stickTurn !== 0;
-    return {
+    const result: DriverInput = {
       driveX: sticks ? stickX : axis('right', 'left'),
       driveY: sticks ? stickY : axis('forward', 'back'),
       turn: sticks ? stickTurn : axis('turnRight', 'turnLeft'),
@@ -85,7 +89,10 @@ export class InputManager {
       block: held('block'),
       climbUp: climb && !this.climbDown,
       climbDown: climb && this.climbDown,
+      powerUp: held('powerUp'),
     };
+    this.tapped.clear();
+    return result;
   }
 
   dispose(): void {
@@ -130,6 +137,7 @@ export class InputManager {
       return;
     }
     this.keys.add(event.code);
+    this.tapped.add(event.code);
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
@@ -138,6 +146,7 @@ export class InputManager {
 
   private readonly onBlur = (): void => {
     this.keys.clear();
+    this.tapped.clear();
   };
 }
 

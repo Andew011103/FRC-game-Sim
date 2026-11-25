@@ -64,7 +64,7 @@ export class SnapshotWriter {
       this.full = true;
       const most =
         16 +
-        robots.reduce((sum, robot, i) => sum + 32 + robot.wheels.length * 2 + parts[i].length * 40, 0) +
+        robots.reduce((sum, robot, i) => sum + 36 + robot.wheels.length * 2 + parts[i].length * 40, 0) +
         props.length * 20 +
         pieces.count * 9;
       this.scratch = new DataView(new ArrayBuffer(most));
@@ -88,9 +88,13 @@ export class SnapshotWriter {
     u8(robots.length);
     robots.forEach((robot, index) => {
       pose(robot.body.translation(), robot.body.rotation());
-      u8(robot.climbing ? 1 : 0);
+      u8((robot.climbing ? 1 : 0) | (robot.power.active > 0 ? 2 : 0));
       u8(robot.climbLevel());
       u16(robot.capacity());
+      // The power-up's time on in tenths of a second, its recharge in halves, and its uses left (255 for no limit).
+      u8(Math.min(255, Math.ceil(robot.power.active * 10)));
+      u8(Math.min(255, Math.ceil(robot.power.cooldown * 2)));
+      u8(Number.isFinite(robot.power.usesLeft) ? Math.min(254, robot.power.usesLeft) : 255);
       u8(robot.wheels.length);
       for (const wheel of robot.wheels) i16(Math.atan2(Math.sin(wheel.steer), Math.cos(wheel.steer)) * ANGLE);
 
@@ -109,7 +113,7 @@ export class SnapshotWriter {
           part.size[0],
           part.size[1],
           part.size[2],
-          // A colour as a whole number fits a 32-bit float exactly.
+          // A color as a whole number fits a 32-bit float exactly.
           parseInt(part.color.slice(1, 7), 16) || 0,
         ];
         const base = p * values.length;
@@ -186,9 +190,13 @@ export class SnapshotReader {
       robot.prevRot = robot.rotation();
       robot.body.setTranslation(position(), false);
       robot.body.setRotation(rotation(), false);
-      robot.climbing = u8() === 1;
+      robot.climbing = (u8() & 1) !== 0;
       const climbLevel = u8();
       const capacity = u16();
+      const active = u8() / 10;
+      const cooldown = u8() / 2;
+      const uses = u8();
+      robot.power = { active, cooldown, usesLeft: uses === 255 ? Infinity : uses };
       const wheels = u8();
       for (let w = 0; w < wheels; w++) robot.wheels[w].steer = i16() / ANGLE;
 

@@ -1,0 +1,214 @@
+{
+  "entries": [
+    {
+      "title": "Angled above, Ordering",
+      "date": "2026-11-24",
+      "changes": [
+        "Angled Above View",
+        "Shop categorization",
+        "Robots with several fixed shooters fire from all of them: the robot turns the shooter chosen to aim it (or else the first) to the target, and the rest fire along with it.",
+        "Fuel drawn at its true size",
+        "Sloped trench blocks",
+        "Robots slide along walls instead of sticking",
+        "DEEP SPACE ROBOTICS"
+      ]
+    },
+    {
+      "title": "Name Colors, Turreted dumper, more Tags",
+      "date": "2026-11-23",
+      "changes": [
+        "Fancy Name Designs",
+        "Custom Skins are legal in all Multiplayer Matches",
+        "Turreted Dumper addition",
+        "Some robots can't pass back to Alliance Zone",
+        "New robot tags: Open top, No passing, Limited turret, Turreted dumper and Double turret."
+      ]
+    },
+    {
+      "title": "Drive Pass Road",
+      "date": "2026-11-22",
+      "changes": [
+        "Drive pass road visual",
+        "Rivets"
+      ]
+    },
+    {
+      "title": "The Shop and power-ups",
+      "date": "2026-11-22",
+      "changes": [
+        "The Shop",
+        "Power Ups implementation"
+      ]
+    },
+    {
+      "title": "Leaderboards",
+      "date": "2026-11-21",
+      "changes": [
+        "Leaderboard Implementation",
+        "Champion Skins",
+        "Game Seasons for drive pass and leaderboards",
+        "Hub fuel processing changes",
+        "Open top hoppers",
+        "Speed Keys",
+        "Vanity Structures more angles of freedom",
+        "Game Piece Effects",
+        "Player Page integrated Cosmetics"
+      ]
+    },
+    {
+      "title": "Drive Pass and LED strips",
+      "date": "2026-11-20",
+      "changes": [
+        "Drive Pass\nits like battle pass but for robotics",
+        "LED cosmetics",
+        "More freedom for skins",
+        "Energized now needs 630 fuel and Supercharged 1000; Traversal stays at 50 tower points.",
+        "Foul addition changes"
+      ]
+    },
+    {
+      "title": "Full Multiplayer Update",
+      "date": "2026-11-18",
+      "changes": [
+        "Multiplayer Implementations",
+        "Robots can be chosen within rooms",
+        "Chat feature",
+        "Host transfer process",
+        "Constant MP lobby between matches",
+        "Match Timing",
+        "Auto Start Pos Changes",
+        "EPA Ratings",
+        "Shot Blocker FIx",
+        "Outpost Implementation",
+        "Fuel Physics",
+        "Round Hopper and Drivetrain",
+        "Chamfered Hopper and Drivetrain",
+        "Many more stuff i dont remmebe"
+      ]
+    },
+    {
+      "title": "Truer shooting, and settings in your account",
+      "changes": [
+        "Shooters that adjust for distance now drop fuel into the middle of the hub instead of slightly long.",
+        "The launch angle is the steepest a shooter can use; for long shots it flattens as far as it needs to.",
+        "Signed in, your chosen robot and all your settings, controls included, follow you to any device."
+      ]
+    },
+    {
+      "title": "Player records",
+      "date": "2026-11-15",
+      "changes": [
+        "Individual Player screens and other stuff i think"
+      ]
+    },
+    {
+      "title": "Beta Multiplayer",
+      "date": "2026-11-14",
+      "changes": [
+        "Room Code and Hostable Private Rooms",
+        "Host Runs the whole match on their device",
+        "Multiplayer Stats",
+        "Account System (Might remove if this is too laggy)"
+      ]
+    },
+    {
+      "title": "More Shooter Calibration",
+      "date": "2026-11-13",
+      "changes": [
+        "Different fire rates in Auto, accounting for robot leaning",
+        "Tower frames are in the alliance color, with bear metal (2046) rungs."
+      ]
+    },
+    {
+      "title": "Controls and DIsplay",
+      "date": "2026-11-12",
+      "changes": [
+        "2026 Rebuilt (Presented by Haas)",
+        "Settings",
+        "Fuel Processing",
+        "Color Themes!",
+        "Outtake, Expand Hopper, Climb, and shot Blocker",
+        "Driver Station",
+        "Other Stuff i think"
+      ]
+    },
+    {
+      "title": "Official score display",
+      "date": "2026-11-12",
+      "changes": [
+        "Rebuilt (Presented by Haas) official score display",
+        "Teams",
+        "Robot Shooting conditions",
+        "shot blocker testing",
+        "Outtake testing",
+        "Fuel that leaves the field is thrown back in.",
+        "Reset now resets the whole field."
+      ]
+    },
+    {
+      "title": "Separate screens",
+      "date": "2026-11-10",
+      "changes": [
+        "Separate Screens",
+        "Alliance Colors",
+        "Robot selector, Stat Bars",
+        "Fouls testing",
+        "Robot Tags"
+      ]
+    },
+    {
+      "title": "Match rules",
+      "date": "2026-11-10",
+      "changes": [
+        "Human Player",
+        "Intake and Round Hopper Division",
+        "Shot blocker Testing"
+      ]
+    },
+    {
+      "title": "FRC 2026 Rebuilt (Presented by Haas) Field",
+      "date": "2026-11-10",
+      "changes": [
+        "Realistic Hub",
+        "Realistic Trench",
+        "Fuel Grace Period",
+        "Outpost Exists"
+      ]
+    },
+    {
+      "title": "Passing and hub lights",
+      "date": "2026-11-10",
+      "changes": [
+        "Robot Passing",
+        "Hub lights",
+        "Hoppers show how full they are",
+        "Robots can fuel surf"
+      ]
+    },
+    {
+      "title": "Shooting and Expanding Hoppers",
+      "date": "2026-11-09",
+      "changes": [
+        "Chassis turning to shoot",
+        "Shoot on the Move",
+        "Expanding hoppers slide out"
+      ]
+    },
+    {
+      "title": "Robot builder",
+      "date": "2026-11-09",
+      "changes": [
+        "Each Subsystem is a customizable assembly",
+        "Bumpers and drive train canbe reshaped"
+      ]
+    },
+    {
+      "title": "FRC 2026 Rebuilt (Presented by Haas)",
+      "date": "2026-11-09",
+      "changes": [
+        "FRC 2026 Rebuilt (Presented by Haas)",
+        "Driving sandbox with swerve and tank drives, physics testing and other stuff"
+      ]
+    }
+  ]
+}

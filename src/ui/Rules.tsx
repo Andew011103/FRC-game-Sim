@@ -1,5 +1,6 @@
 import { configuredGame } from '../games';
 import { Fields } from './Builder';
+import { multiplayer } from '../net/room';
 import { useGame } from './store';
 
 /** The rules of the next match: timed or not, and whatever the game lets you change. */
@@ -11,7 +12,14 @@ export function Rules() {
   const setMode = useGame((state) => state.setMode);
   const setScreen = useGame((state) => state.setScreen);
   const menu = useGame((state) => state.menu);
+  const room = useGame((state) => state.room);
+  const singlePowerUps = useGame((state) => state.settings.singlePowerUps);
+  const updateSettings = useGame((state) => state.updateSettings);
   const game = configuredGame(gameId, options);
+  // From a room, the switch is the room's (only its host may change it); otherwise it is for singleplayer.
+  const inRoom = menu === 'multiplayer' && room !== null;
+  const powerUps = inRoom ? room.settings.powerUps : singlePowerUps;
+  const setPowerUps = (on: boolean) => (inRoom ? multiplayer.setSettings({ powerUps: on }) : updateSettings({ singlePowerUps: on }));
 
   return (
     <div className="screen">
@@ -38,6 +46,39 @@ export function Rules() {
             {mode === 'practice'
               ? 'No clock. Points still count so you can practise scoring.'
               : 'A timed 2:40 match. You drive during the autonomous period too.'}
+          </p>
+        </section>
+
+        {inRoom && (
+          <section className="card">
+            <h2>Robots</h2>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={room.settings.customRobots}
+                disabled={room.role !== 'host'}
+                onChange={(event) => multiplayer.setSettings({ customRobots: event.target.checked })}
+              />
+              Allow custom robots
+            </label>
+            <p className="hint">
+              {room.settings.customRobots
+                ? 'Players may drive robots they made in the builder.'
+                : 'Only official robots drive. A copy of an official robot with only new colors, LED strips or see-through parts counts as the official robot.'}
+            </p>
+          </section>
+        )}
+
+        <section className="card">
+          <h2>Power-ups</h2>
+          <label className="check">
+            <input type="checkbox" checked={powerUps} disabled={inRoom && room.role !== 'host'} onChange={(event) => setPowerUps(event.target.checked)} />
+            Allow power-ups from the Shop
+          </label>
+          <p className="hint">
+            {inRoom
+              ? 'Players bring the power-up they equipped and switch it on with its key.'
+              : 'Your equipped power-up comes along. A match with power-ups allowed does not go on the leaderboards, even if none is used.'}
           </p>
         </section>
 

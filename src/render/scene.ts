@@ -26,13 +26,18 @@ import type { SimRobot } from '../sim/robot';
 import type { PartView } from '../sim/subsystems/types';
 import type { SimWorld } from '../sim/world';
 
-export type CameraMode = 'driver' | 'follow' | 'top' | 'orbit' | 'inspect';
+/** How far the angled camera sits from the robot, in meters, along the way it looks. */
+const ANGLED_DISTANCE = 4.8;
+
+export type CameraMode = 'driver' | 'follow' | 'angled' | 'top' | 'orbit' | 'inspect';
 
 interface RobotView {
   robot: SimRobot;
   group: THREE.Group;
   steerGroups: THREE.Group[];
   parts: { part: PartView; mesh: THREE.Mesh; color: string }[];
+  /** A ring of light on the floor around the robot while its power-up is on. */
+  aura: THREE.Mesh | null;
 }
 
 export type Quality = 'low' | 'medium' | 'high';
@@ -47,7 +52,7 @@ const ALLIANCE_COLORS = { blue: 0x2f6fed, red: 0xe5484d };
 const FOV = 55;
 
 const BACKGROUND = new THREE.Color(0x0b0d12);
-/** Colour of a light bar that is switched off. */
+/** Color of a light bar that is switched off. */
 const UNLIT = '#111827';
 
 /** Draws a SimWorld. Reads simulation state and never changes it. */
@@ -180,8 +185,8 @@ export class SceneView {
   }
 
   /**
-   * Sets how the light bars carrying a tag look: steady in their own colour,
-   * pulsing, their own colour with a white light running along them, or dark.
+   * Sets how the light bars carrying a tag look: steady in their own color,
+   * pulsing, their own color with a white light running along them, or dark.
    */
   setTagLight(tag: string, light: GoalLight, time: number): void {
     const bars = this.tagged.get(tag) ?? [];
@@ -430,13 +435,19 @@ export class SceneView {
     this.driverStation = station;
   }
 
+  /** How steeply the angled camera looks down at the robot, in degrees. */
+  private angledPitch = 35;
+  setAngledPitch(degrees: number): void {
+    this.angledPitch = degrees;
+  }
+
   private placeCamera(mode: CameraMode, time: number, frameDt: number): void {
     const { length, width } = this.field;
     const camera = this.camera;
     const target = this.robotViews[this.playerIndex]?.group;
     // Which end of the field the driver stands at: -1 for blue, +1 for red.
     const side = this.robotViews[this.playerIndex]?.robot.alliance === 'red' ? 1 : -1;
-    if (mode !== 'follow') this.followReady = false;
+    if (mode !== 'follow' && mode !== 'angled') this.followReady = false;
     camera.up.set(0, 1, 0);
 
     if (mode === 'inspect' && target) {
@@ -457,6 +468,19 @@ export class SceneView {
       const z = -side * this.driverStationZ * (2 - this.driverStation);
       camera.position.set(side * (length / 2 + 1.8), 2.3, z);
       camera.lookAt(target.position.x, 0.3, target.position.z);
+    } else if (mode === 'angled') {
+      // Above the robot on the driver's side, looking down at the angle the
+      // player set. It slides along with the robot but never turns, so the field
+      // always stretches away from the driver as it does from the driver station.
+      const look = target.position.clone().setY(0.3);
+      const pitch = THREE.MathUtils.degToRad(this.angledPitch);
+      const back = Math.cos(pitch) * ANGLED_DISTANCE;
+      const wantPos = look.clone().add(new THREE.Vector3(side * back, Math.sin(pitch) * ANGLED_DISTANCE, 0));
+      const blend = this.followReady ? 1 - Math.exp(-8 * frameDt) : 1;
+      this.followPos.lerp(wantPos, blend);
+      this.followReady = true;
+      camera.position.copy(this.followPos);
+      camera.lookAt(this.followPos.x - side * back, look.y, this.followPos.z);
     } else if (mode === 'top') {
       // Away-from-driver is up the screen, so field-centric controls stay intuitive.
       const tan = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
@@ -485,6 +509,18 @@ function poseRobotView(view: RobotView, alpha: number): void {
   view.steerGroups.forEach((steer, i) => {
     steer.rotation.y = robot.wheels[i].steer;
   });
+  if (view.aura) {
+    const on = robot.power.active > 0;
+    view.aura.visible = on;
+    if (on) {
+      // It pulses, and fades out over its last second.
+      const time = performance.now() / 1000;
+      const material = view.aura.material as THREE.MeshBasicMaterial;
+      material.opacity = (0.55 + 0.25 * Math.sin(time * 9)) * Math.min(1, robot.power.active);
+      const grow = 1 + 0.06 * Math.sin(time * 9);
+      view.aura.scale.set(grow, grow, 1);
+    }
+  }
   for (const entry of view.parts) {
     const { part, mesh } = entry;
     if (part.color !== entry.color) {
@@ -716,7 +752,28 @@ function buildRobotView(robot: SimRobot): RobotView {
     }),
   );
 
-  return { robot, group, steerGroups, parts };
+  // A robot carrying a power-up gets a ring of light, shown while the power-up is on.
+  let aura: THREE.Mesh | null = null;
+  if (robot.powerUp) {
+    const reach = Math.max(robot.half.x, robot.half.z);
+    aura = new THREE.Mesh(
+      new THREE.RingGeometry(reach * 0.95, reach * 1.35, 48),
+      new THREE.MeshBasicMaterial({
+        color: robot.powerUp.color,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    aura.rotation.x = -Math.PI / 2;
+    aura.position.y = -robot.rig.rideHeight + 0.012;
+    aura.visible = false;
+    aura.renderOrder = 2;
+    group.add(aura);
+  }
+  return { robot, group, steerGroups, parts, aura };
 }
 
 /** White digits on a clear background, and how wide the picture is for its height. */
@@ -744,11 +801,18 @@ function numberTexture(text: string): { texture: THREE.CanvasTexture; aspect: nu
   return { texture, aspect: canvas.width / canvas.height };
 }
 
+/** How much a game piece's drawn ball is grown so it looks its true size; see buildPieceMesh. */
+const PIECE_GROW = 2 / (1 + 0.934);
+
 /** All game pieces are drawn as one batch of plain low-detail spheres. */
 function buildPieceMesh(pieces: PieceSet): THREE.InstancedMesh | null {
   if (pieces.count === 0) return null;
+  // A low-detail ball's flat faces sit inside its corners (at 0.934 to 1 of the radius), so it looks
+  // smaller than it is. Grown so its outline averages the true size: a 0.15 m fuel looks 0.15 m across.
+  const geometry = new THREE.IcosahedronGeometry(1, 1);
+  geometry.scale(PIECE_GROW, PIECE_GROW, PIECE_GROW);
   const mesh = new THREE.InstancedMesh(
-    new THREE.IcosahedronGeometry(1, 1),
+    geometry,
     new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }),
     pieces.count,
   );

@@ -20,6 +20,8 @@ export interface DriverInput {
   climbUp: boolean;
   /** Held to lower the robot back to the floor. */
   climbDown: boolean;
+  /** Pressed to switch on the power-up equipped from the Shop. */
+  powerUp: boolean;
 }
 
 export const NEUTRAL_INPUT: DriverInput = {
@@ -33,6 +35,7 @@ export const NEUTRAL_INPUT: DriverInput = {
   block: false,
   climbUp: false,
   climbDown: false,
+  powerUp: false,
 };
 
 export type InputAction = 'toggleFieldCentric' | 'cycleCamera' | 'reset' | 'pause' | 'speed1' | 'speed2' | 'speed3';

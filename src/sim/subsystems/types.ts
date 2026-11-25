@@ -62,7 +62,7 @@ export function shapeFields(color: string): FieldSpec[] {
     { key: 'sizeX', label: 'Length', kind: 'number', default: 0.3, min: 0.02, max: 1.2, step, unit: 'm', group },
     { key: 'sizeZ', label: 'Width', kind: 'number', default: 0.3, min: 0.02, max: 1.2, step, unit: 'm', group },
     { key: 'sizeY', label: 'Height', kind: 'number', default: 0.3, min: 0.02, max: 1.4, step, unit: 'm', group },
-    { key: 'color', label: 'Colour', kind: 'color', default: color, group },
+    { key: 'color', label: 'Color', kind: 'color', default: color, group },
   ];
 }
 
@@ -130,7 +130,7 @@ export interface PartView {
    * of size 1, so it stretches with the part's size like any box.
    */
   outline?: { x: number; z: number }[];
-  /** Lights: drawn glowing in their colour, which can change from moment to moment. */
+  /** Lights: drawn glowing in their color, which can change from moment to moment. */
   glow?: boolean;
   size: [number, number, number];
   color: string;

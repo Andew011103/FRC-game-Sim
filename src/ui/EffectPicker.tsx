@@ -12,7 +12,7 @@ export function EffectPreview({ effect }: { effect: PieceEffect }) {
         className={`pass-piece pass-piece-${effect.kind}`}
         style={
           {
-            // As in a match: the fuel takes on its share of the colour, and the glow is as bright as set.
+            // As in a match: the fuel takes on its share of the color, and the glow is as bright as set.
             '--piece': `color-mix(in srgb, ${color} ${Math.round(scales.fuelColor * 100)}%, #f5d33b)`,
             '--halo': `color-mix(in srgb, ${color} ${Math.round(Math.min(1, scales.glow) * 100)}%, transparent)`,
           } as React.CSSProperties
@@ -22,7 +22,7 @@ export function EffectPreview({ effect }: { effect: PieceEffect }) {
   );
 }
 
-/** Choosing a game piece effect and its colour. With `optional`, it can be left with none. */
+/** Choosing a game piece effect and its color. With `optional`, it can be left with none. */
 export function EffectPicker({
   value,
   onChange,
@@ -55,11 +55,11 @@ export function EffectPicker({
         <>
           <label className="pass-check">
             <input type="checkbox" checked={alliance} onChange={(event) => onChange({ ...value, color: event.target.checked ? ALLIANCE_COLOR : '#ff3b3b' })} />
-            Alliance colour
+            Alliance color
           </label>
           {!alliance && (
             <label>
-              Colour
+              Color
               <input type="color" value={value.color} onChange={(event) => onChange({ ...value, color: event.target.value })} />
             </label>
           )}

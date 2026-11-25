@@ -15,6 +15,7 @@ function setup(players = 2): MatchSetup {
     gameId: 'rebuilt-2026',
     options: {},
     mode: 'match',
+    powerUps: true,
     seed: 7,
     players: Array.from({ length: players }, (_, id) => ({
       id,

@@ -26,6 +26,7 @@ import {
   playerFromWire,
   playersToWire,
   robotFromWire,
+  robotAllowed,
   robotToWire,
   setupFromWire,
   type ChatLine,
@@ -310,13 +311,21 @@ export class HostSession {
     const after = this.settings;
     if (after.robotRights !== before.robotRights) this.note(`The host changed the room so ${RIGHTS_NOTES[after.robotRights]}.`);
     if (after.mode !== before.mode) this.note(`The host set the match to ${after.mode === 'match' ? 'a timed match' : 'free practice, with no clock'}.`);
+    if (after.powerUps !== before.powerUps) this.note(after.powerUps ? 'The host allowed power-ups.' : 'The host turned power-ups off.');
+    if (after.customRobots !== before.customRobots) {
+      this.note(
+        after.customRobots
+          ? 'The host allowed custom robots.'
+          : 'The host allowed only official robots. Ones only changed in looks still count.',
+      );
+    }
     if (after.listed !== before.listed) {
       this.note(after.listed ? 'The host listed the room in the open matches.' : 'The host took the room off the open matches list.');
     }
     this.roomChanged();
   }
 
-  /** A note from the room itself in the chat, in its own colour. */
+  /** A note from the room itself in the chat, in its own color. */
   private note(text: string): void {
     this.addChat({ from: -1, name: 'Room', text, system: true });
   }
@@ -354,10 +363,13 @@ export class HostSession {
 
   /** Builds the field with everyone who has a seat and tells every player to do the same. */
   start(gameId: string, options: Record<string, unknown>, mode: MatchMode = this.settings.mode, seed = Date.now() % 1e9): SimWorld {
-    const seated = this.players.filter((player): player is PlayerInfo & { seat: Seat } => player.seat !== null);
+    // A robot the room does not allow stays off the field, even if its player has a seat.
+    const seated = this.players.filter(
+      (player): player is PlayerInfo & { seat: Seat } => player.seat !== null && robotAllowed(player.robot, this.settings),
+    );
     // Robots are added blue then red, by station, so everyone's field is built the same way.
     seated.sort((a, b) => (a.seat.alliance === b.seat.alliance ? a.seat.station - b.seat.station : a.seat.alliance === 'blue' ? -1 : 1));
-    const setup: MatchSetup = { gameId, options, mode, seed, players: seated.map((player) => ({ ...player })) };
+    const setup: MatchSetup = { gameId, options, mode, powerUps: this.settings.powerUps, seed, players: seated.map((player) => ({ ...player })) };
     this.setup = setup;
     this.sim = buildNetWorld(setup);
     this.tick = 0;

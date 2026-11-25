@@ -29,9 +29,9 @@ export const LED_STATES = [
 export type LedState = (typeof LED_STATES)[number]['key'];
 
 /**
- * How the lights show a colour. The free ones come with every robot; the rest
+ * How the lights show a color. The free ones come with every robot; the rest
  * are LED effects unlocked in the Drive Pass. Patterns that move use the
- * state's accent colour for what moves.
+ * state's accent color for what moves.
  */
 export const LED_PATTERNS: { value: string; label: string; free: boolean }[] = [
   { value: 'solid', label: 'Solid', free: true },
@@ -39,15 +39,15 @@ export const LED_PATTERNS: { value: string; label: string; free: boolean }[] = [
   { value: 'pulse', label: 'Pulse', free: true },
   { value: 'off', label: 'Off', free: true },
   { value: 'blink', label: 'Blink: two quick flashes when it starts', free: false },
-  { value: 'chase', label: 'Chase: the accent colour runs along, with a fading tail', free: false },
-  { value: 'bounce', label: 'Bounce: a blip of the accent colour bounces end to end', free: false },
+  { value: 'chase', label: 'Chase: the accent color runs along, with a fading tail', free: false },
+  { value: 'bounce', label: 'Bounce: a blip of the accent color bounces end to end', free: false },
   { value: 'strobe', label: 'Strobe', free: false },
   { value: 'breathe', label: 'Breathe', free: false },
   { value: 'rainbow', label: 'Rainbow', free: false },
   { value: 'police', label: 'Two-tone flash', free: false },
 ];
 
-/** The colour the lights show when they are dark. */
+/** The color the lights show when they are dark. */
 const DARK = '#111111';
 /** A strip is lit in segments about this long, so light can move along it. */
 const SEGMENT_LENGTH = 0.04;
@@ -55,7 +55,7 @@ const MAX_SEGMENTS = 16;
 
 type LedSettings = Shape & Turn & Record<`${LedState}Color` | `${LedState}Accent` | `${LedState}Pattern`, string>;
 
-/** A colour as red, green and blue from 0 to 1, and back. */
+/** A color as red, green and blue from 0 to 1, and back. */
 const channels = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 const toHex = (rgb: number[]): string =>
   `#${rgb.map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, '0')).join('')}`;
@@ -82,7 +82,7 @@ const CHASE_TAIL = 4;
 const BOUNCE_SECONDS = 0.8;
 
 /**
- * The colour one segment shows at a moment, `time` seconds into the state.
+ * The color one segment shows at a moment, `time` seconds into the state.
  * `index` counts the segments from one end of the strip, of `count`.
  */
 export function patternColor(pattern: string, color: string, time: number, accent = '#ffffff', index = 0, count = 1): string {
@@ -125,7 +125,7 @@ export function patternColor(pattern: string, color: string, time: number, accen
 }
 
 /**
- * A strip of lights, lit in segments. It shows a colour and a pattern for
+ * A strip of lights, lit in segments. It shows a color and a pattern for
  * each thing the robot can be doing: idling, shooting, shooting on the move,
  * passing, climbing or blocking shots.
  */
@@ -212,7 +212,7 @@ const DEFAULTS: Record<LedState, [string, string, string]> = {
 const stateFields: FieldSpec[] = [...LED_STATES]
   .reverse()
   .flatMap(({ key, label }) => [
-    { key: `${key}Color`, label: `${label}: colour`, kind: 'color' as const, default: DEFAULTS[key][0] },
+    { key: `${key}Color`, label: `${label}: color`, kind: 'color' as const, default: DEFAULTS[key][0] },
     {
       key: `${key}Pattern`,
       label: `${label}: pattern`,
@@ -220,14 +220,14 @@ const stateFields: FieldSpec[] = [...LED_STATES]
       default: DEFAULTS[key][2],
       options: LED_PATTERNS.map(({ value, label: name }) => ({ value, label: name })),
     },
-    { key: `${key}Accent`, label: `${label}: accent colour (chase, bounce, two-tone)`, kind: 'color' as const, default: DEFAULTS[key][1] },
+    { key: `${key}Accent`, label: `${label}: accent color (chase, bounce, two-tone)`, kind: 'color' as const, default: DEFAULTS[key][1] },
   ]);
 
 export const ledSpec: SubsystemSpec = {
   type: 'led',
   label: 'LED strip',
   description:
-    'A strip of lights that shows what the robot is doing: a colour and a pattern for idling, shooting, shooting on the move, passing, climbing and blocking. Purely for show.',
+    'A strip of lights that shows what the robot is doing: a color and a pattern for idling, shooting, shooting on the move, passing, climbing and blocking. Purely for show.',
   fields: [...shapeFields('#2563eb'), ...turnFields(), ...stateFields],
   upgrade: (def, chassis) => ({
     // A thin strip along the top of the frame's front.

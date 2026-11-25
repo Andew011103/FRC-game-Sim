@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { MAX_TEAM_LENGTH } from '../robots/team';
 import { OFFICIAL_ROBOTS, findRobot } from '../robots';
 import { MAX_SKIN_EXTRAS, newRobot, sanitizeRobot } from '../robots/custom';
 import { cleanEpa } from '../robots/epa';
@@ -211,7 +212,7 @@ export function Builder({ onPreview, onTestDrive }: Props) {
 
   const drivetrain = draft.drivetrain as unknown as Record<string, unknown>;
   const chassis = draft.chassis as unknown as Record<string, unknown>;
-  // A skin keeps the robot's frame, drivetrain and mechanisms; it may only recolour them and add see-through parts.
+  // A skin keeps the robot's frame, drivetrain and mechanisms; it may only recolor them and add see-through parts.
   const skinBase = draft.skinOf ? findRobot(draft.skinOf.robotId) : null;
   const baseCount = skinBase?.subsystems.length ?? 0;
   // Working parts and parts only for looks are counted apart: LED strips and see-through structures have their own allowance.
@@ -258,7 +259,7 @@ export function Builder({ onPreview, onTestDrive }: Props) {
             <h2>Skin for {skinBase.name}</h2>
             <p className="hint">
               A Drive Pass skin. The frame, drivetrain, bumpers and mechanisms are {skinBase.name}'s and stay as they are, so the
-              skin cannot change how it plays. Recolour any part, and add see-through structures and LED strips anywhere. Save it to
+              skin cannot change how it plays. Recolor any part, and add see-through structures and LED strips anywhere. Save it to
               the Drive Pass from the side panel.
             </p>
             <p className="hint">
@@ -349,13 +350,13 @@ export function Builder({ onPreview, onTestDrive }: Props) {
         </div>
         {draft.subsystems.map((subsystem, index) => {
           const spec = SUBSYSTEM_SPECS[subsystem.type];
-          // One of the robot's own mechanisms, in a skin: only its colours can change.
+          // One of the robot's own mechanisms, in a skin: only its colors can change.
           if (skinBase && index < baseCount) {
             return (
               <div className="subsystem card" key={index}>
                 <div className="subsystem-head">
                   <strong>{spec.label}</strong>
-                  <span className="muted">{skinBase.name}'s own: colours only</span>
+                  <span className="muted">{skinBase.name}'s own: colors only</span>
                 </div>
                 <Fields
                   fields={spec.fields.filter((field) => field.kind === 'color')}
@@ -383,7 +384,7 @@ export function Builder({ onPreview, onTestDrive }: Props) {
                   onClick={() =>
                     change({
                       ...draft,
-                      // An exact copy, every setting and colour the same, placed right after the original.
+                      // An exact copy, every setting and color the same, placed right after the original.
                       subsystems: [
                         ...draft.subsystems.slice(0, index + 1),
                         structuredClone(subsystem),
@@ -461,7 +462,7 @@ export function Builder({ onPreview, onTestDrive }: Props) {
         <p className="hint">
           Custom robots are saved in this browser. They can be driven anywhere but never count on leaderboards.
         </p>
-        <h2>Name and colour</h2>
+        <h2>Name and color</h2>
         <div className="name-row">
           <input
             type="text"
@@ -475,7 +476,7 @@ export function Builder({ onPreview, onTestDrive }: Props) {
           <input
             type="color"
             value={draft.color ?? '#9aa3af'}
-            aria-label="Robot colour"
+            aria-label="Robot color"
             onChange={(event) => change({ ...draft, color: event.target.value })}
           />
         </div>
@@ -484,12 +485,16 @@ export function Builder({ onPreview, onTestDrive }: Props) {
         <div className="team-row">
           <input
             type="text"
-            inputMode="numeric"
             placeholder="Team no."
-            maxLength={5}
-            aria-label="Team number"
+            maxLength={MAX_TEAM_LENGTH}
+            title="A team number, or a short label such as Kitbot or 2910 v2"
+            aria-label="Team number or label"
             value={draft.team ?? ''}
-            onChange={(event) => change({ ...draft, team: event.target.value.replace(/\D/g, '') || undefined })}
+            onChange={(event) => {
+              // Spaces are kept while typing; only the ends are tidied when the robot is saved.
+              const typed = event.target.value.replace(/[^A-Za-z0-9 .#'&+-]/g, '').slice(0, MAX_TEAM_LENGTH);
+              change({ ...draft, team: typed.trim() ? typed : undefined });
+            }}
           />
           {draft.icon ? (
             <img className="team-icon" src={draft.icon} alt="Team icon" />
@@ -518,6 +523,26 @@ export function Builder({ onPreview, onTestDrive }: Props) {
               onChange={(event) => change({ ...draft, epa: cleanEpa(event.target.value) })}
             />
           </label>
+        )}
+        {import.meta.env.DEV && (
+          <div className="tag-overrides">
+            {TAG_OVERRIDES.map(({ key, label }) => (
+              <label className="field" key={key}>
+                <span>{label} tag (official robots only)</span>
+                <select
+                  value={draft[key] === undefined ? 'auto' : draft[key] ? 'yes' : 'no'}
+                  onChange={(event) => {
+                    const { [key]: _old, ...rest } = draft;
+                    change(event.target.value === 'auto' ? (rest as RobotDefinition) : { ...draft, [key]: event.target.value === 'yes' });
+                  }}
+                >
+                  <option value="auto">By its parts</option>
+                  <option value="yes">Show it</option>
+                  <option value="no">Leave it off</option>
+                </select>
+              </label>
+            ))}
+          </div>
         )}
         </>
         )}
@@ -553,12 +578,12 @@ export function Builder({ onPreview, onTestDrive }: Props) {
         </button>
         {skinBase && import.meta.env.DEV && (
           <>
-            <h2>Drive Pass</h2>
+            <h2>{draft.skinOf!.shop ? 'Shop' : 'Drive Pass'}</h2>
             {draft.skinOf!.champion ? (
               <p className="hint">A champion skin: worn only by whoever is first on {skinBase.name}'s leaderboard, while they stay first.</p>
             ) : (
             <label className="field">
-              <span>Ranking Points needed</span>
+              <span>{draft.skinOf!.shop ? 'Price in Rivets' : 'Ranking Points needed'}</span>
               <input
                 type="number"
                 min={0}
@@ -570,7 +595,7 @@ export function Builder({ onPreview, onTestDrive }: Props) {
             )}
             <p className="hint">Saved as the reward "{draft.skinOf!.rewardId}", named after this robot.</p>
             <button className="primary" onClick={() => void saveSkinToPass(draft).then(setMessage)}>
-              {draft.skinOf!.champion ? 'Save champion skin' : 'Save skin to the Drive Pass'}
+              {draft.skinOf!.champion ? 'Save champion skin' : draft.skinOf!.shop ? 'Save skin to the Shop' : 'Save skin to the Drive Pass'}
             </button>
           </>
         )}
@@ -733,6 +758,12 @@ async function shrinkImage(file: File): Promise<string> {
   bitmap.close();
   return canvas.toDataURL('image/png');
 }
+
+/** Tags the selector cannot tell from the parts alone, set by hand on official robots. */
+const TAG_OVERRIDES = [
+  { key: 'dualIntake', label: 'Dual intake' },
+  { key: 'doubleTurret', label: 'Double turret' },
+] as const;
 
 /** A robot's name as a file name and official id: lower-case letters, digits and dashes. */
 function slugOf(robot: RobotDefinition): string {

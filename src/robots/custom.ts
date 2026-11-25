@@ -92,6 +92,9 @@ export function sanitizeRobot(raw: unknown): RobotDefinition | null {
     icon: iconOf(data),
     // Kept so the official builder can set it; it is only ever shown for official robots.
     epa: cleanEpa(data.epa),
+    // Tags the official builder can set, as they are hard to tell from the parts.
+    ...(typeof data.dualIntake === 'boolean' ? { dualIntake: data.dualIntake } : {}),
+    ...(typeof data.doubleTurret === 'boolean' ? { doubleTurret: data.doubleTurret } : {}),
     // A skin being made may carry a game piece effect; other custom robots never do.
     ...(skinOf ? { skinOf, ...(cleanEffect(data.pieceEffect) ? { pieceEffect: cleanEffect(data.pieceEffect) } : {}) } : {}),
     traversal: data.traversal === 'trench' || data.traversal === 'bump' ? data.traversal : 'auto',
@@ -109,7 +112,13 @@ function readSkinOf(value: unknown): RobotDefinition['skinOf'] {
   const id = (text: unknown) => typeof text === 'string' && /^[a-z0-9][a-z0-9-]{0,79}$/.test(text);
   if (!id(skin.robotId) || !id(skin.rewardId)) return undefined;
   const rp = typeof skin.rp === 'number' && Number.isFinite(skin.rp) ? Math.max(0, Math.round(skin.rp)) : 0;
-  return { robotId: skin.robotId as string, rewardId: skin.rewardId as string, rp, ...(skin.champion === true ? { champion: true } : {}) };
+  return {
+    robotId: skin.robotId as string,
+    rewardId: skin.rewardId as string,
+    rp,
+    ...(skin.champion === true ? { champion: true } : {}),
+    ...(skin.shop === true ? { shop: true } : {}),
+  };
 }
 
 /** A fresh custom robot, optionally starting as a copy of another one. */

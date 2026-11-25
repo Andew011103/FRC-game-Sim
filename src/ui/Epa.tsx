@@ -1,7 +1,7 @@
 import { epaColor, epaOf } from '../robots/epa';
 import type { RobotDefinition } from '../robots/types';
 
-/** An official robot's EPA in a rounded tag coloured by where it ranks. Nothing for robots without one. */
+/** An official robot's EPA in a rounded tag colored by where it ranks. Nothing for robots without one. */
 export function EpaTag({ robot, className = '' }: { robot: RobotDefinition; className?: string }) {
   const epa = epaOf(robot);
   if (epa === null) return null;

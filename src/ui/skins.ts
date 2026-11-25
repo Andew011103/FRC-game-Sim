@@ -1,24 +1,27 @@
-import { PASS, applySkin, skinFrom, type Tier } from '../pass/pass';
+import { PASS, SHOP, applySkin, skinFrom, type Tier } from '../pass/pass';
 import { findRobot } from '../robots';
 import { sanitizeRobot } from '../robots/custom';
 import type { RobotDefinition } from '../robots/types';
 import { useGame } from './store';
 
 // Drive Pass skins are made in the robot builder, while developing: a copy of
-// an official robot whose mechanisms can only be recoloured, with see-through
+// an official robot whose mechanisms can only be recolored, with see-through
 // structures and LED strips added on. Saving turns the copy back into a skin.
 
-/** Opens the builder on a skin for an official robot: a new one, or one already in the pass. */
-export function openSkinInBuilder(robotId: string, existing?: { id: string; name: string; rp: number }, champion = false): void {
+/**
+ * Opens the builder on a skin for an official robot: a new one, or one already
+ * in the pass or the Shop. For the Shop, `rp` is its price in Rivets.
+ */
+export function openSkinInBuilder(robotId: string, existing?: { id: string; name: string; rp: number }, champion = false, shop = false): void {
   const base = findRobot(robotId);
   const dressed = existing ? applySkin(base, existing.id) : base;
-  const rewardId = existing?.id ?? `${champion ? 'champion' : 'skin'}-${robotId}-${Date.now().toString(36)}`;
-  const rp = existing?.rp ?? (PASS.tiers.at(-1)?.rp ?? 0) + 100;
+  const rewardId = existing?.id ?? `${champion ? 'champion' : shop ? 'shop-skin' : 'skin'}-${robotId}-${Date.now().toString(36)}`;
+  const rp = existing?.rp ?? (shop ? 100 : (PASS.tiers.at(-1)?.rp ?? 0) + 100);
   const draft = sanitizeRobot({
     ...dressed,
     id: undefined,
     name: existing?.name ?? `${base.name} ${champion ? 'Champion' : 'skin'}`,
-    skinOf: { robotId: base.id, rewardId, rp, ...(champion ? { champion: true } : {}) },
+    skinOf: { robotId: base.id, rewardId, rp, ...(champion ? { champion: true } : {}), ...(shop ? { shop: true } : {}) },
   });
   if (!draft) return;
   const state = useGame.getState();
@@ -44,6 +47,17 @@ export async function saveSkinToPass(draft: RobotDefinition): Promise<string> {
   const tier = skinOfDraft(draft);
   if (!tier) return 'This robot is not a skin for an official robot.';
   const skin = tier.reward as (typeof PASS.champions)[number];
+  // A Shop skin goes in the Shop, at its price in Rivets.
+  if (draft.skinOf?.shop) {
+    const items = [...SHOP.items.filter((item) => item.reward.id !== skin.id), { price: tier.rp, reward: skin }].sort((a, b) => a.price - b.price);
+    try {
+      const reply = await fetch('/__shop', { method: 'POST', body: JSON.stringify({ items }) });
+      if (!reply.ok) throw new Error();
+      return `Saved "${skin.name}" to the Shop for ${tier.rp} Rivets. The page reloads with it.`;
+    } catch {
+      return 'Could not save. This only works while running the game locally.';
+    }
+  }
   // A champion skin goes in the champions list (one per robot), any other on the road of rewards.
   const next = draft.skinOf?.champion
     ? { ...PASS, champions: [...PASS.champions.filter((other) => other.robotId !== skin.robotId && other.id !== skin.id), skin] }

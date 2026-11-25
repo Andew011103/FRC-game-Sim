@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { RobotWindow } from '../game';
 import { accountsAvailable, fetchPlayer, rename } from '../account/account';
 import { topRobots, type PlayerStats } from '../stats';
 import { useGame } from './store';
@@ -7,15 +8,16 @@ import { fetchStandings, type Standing } from '../account/leaderboard';
 import { findRobot } from '../robots';
 import { BadgeMark } from './BadgeMark';
 import { CosmeticsSections } from './Cosmetics';
+import { StyledName } from './StyledName';
 
 /** A player's name as a button that opens their record, or as plain text when they have no account to look up. */
 export function PlayerName({ player }: { player: { name: string; accountId?: string; look?: { nameColor: string; badge: string } } }) {
   const showRecord = useGame((state) => state.showRecord);
-  const color = findReward(player.look?.nameColor, 'nameColor')?.color;
+  const style = findReward(player.look?.nameColor, 'nameColor');
   const badge = findReward(player.look?.badge, 'badge');
   const name = (
     <>
-      <span style={color ? { color, fontWeight: 700 } : undefined}>{player.name}</span>
+      <StyledName text={player.name} style={style} />
       {badge && (
         <span className="name-badge">
           <BadgeMark reward={badge} />
@@ -32,7 +34,8 @@ export function PlayerName({ player }: { player: { name: string; accountId?: str
 }
 
 /** One player's record card: this player's own, or another player's opened from their name. */
-export function Record() {
+export function Record({ onWindows }: { onWindows: (windows: RobotWindow[]) => void }) {
+  const [tab, setTab] = useState<'record' | 'cosmetics'>('record');
   const other = useGame((state) => state.recordOf);
   const account = useGame((state) => state.account);
   const ownStats = useGame((state) => state.record);
@@ -70,9 +73,30 @@ export function Record() {
           Back
         </button>
         <h1>{mine ? 'Player' : 'Player record'}</h1>
-        <span className="muted">{mine ? 'Yours' : name}</span>
+        {mine ? (
+          <div className="toggle-pair screen-tabs" role="tablist" aria-label="Player page">
+            <button role="tab" aria-selected={tab === 'record'} className={tab === 'record' ? 'selected' : ''} onClick={() => setTab('record')}>
+              Record
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === 'cosmetics'}
+              className={tab === 'cosmetics' ? 'selected' : ''}
+              onClick={() => setTab('cosmetics')}
+            >
+              Cosmetics and power-ups
+            </button>
+          </div>
+        ) : (
+          <span className="muted">{name}</span>
+        )}
       </header>
 
+      {mine && tab === 'cosmetics' ? (
+        <div className="screen-body">
+          <CosmeticsSections onWindows={onWindows} />
+        </div>
+      ) : (
       <div className="screen-body columns">
         <section className="card">
           <h2>{mine ? 'You' : 'Player'}</h2>
@@ -122,8 +146,8 @@ export function Record() {
         </section>
 
         <Rankings accountId={mine ? account?.id : other?.accountId} />
-        {mine && <CosmeticsSections />}
       </div>
+      )}
     </div>
   );
 }

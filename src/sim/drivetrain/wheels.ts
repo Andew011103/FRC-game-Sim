@@ -127,8 +127,19 @@ export function applyWheelForces(
 
     const total = Math.hypot(drive, scrub);
     if (total > traction && total > 0) {
-      drive *= traction / total;
-      scrub *= traction / total;
+      // The tyre is sliding: it pushes against the way it slips over the floor, as hard as its grip
+      // allows. Pressed into a wall at an angle, the slip is mostly sideways, so the wheel still
+      // carries the robot along the wall at the share of its speed that points that way, as a real one does.
+      const slipAlong = command.speed - speedAlong;
+      const slipSide = -speedSide;
+      const slip = Math.hypot(slipAlong, slipSide);
+      if (slip > 1e-6) {
+        drive = clamp((traction * slipAlong) / slip, -motorLimit, motorLimit);
+        scrub = clamp((traction * slipSide) / slip, -sideLimit, sideLimit);
+      } else {
+        drive *= traction / total;
+        scrub *= traction / total;
+      }
     }
 
     const force = add(scale(normal, load), add(scale(dir, drive), scale(side, scrub)));

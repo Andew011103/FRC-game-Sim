@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { configuredGame } from '../src/games';
 import { rebuilt2026 } from '../src/games/rebuilt-2026';
 
@@ -61,6 +62,41 @@ describe('REBUILT field', () => {
     right.dispose();
     // Two full fields are simulated, which can be slow on a busy machine.
   }, 30000);
+
+  it("the trench's block slopes down from the bar to a short face at each end", () => {
+    const sim = new SimWorld(rebuilt2026);
+    sim.step([]);
+    // Between the bump (which ends 0.597 + 1.854 m from the middle) and the trench opening.
+    const z = (0.597 + 1.854 + (8.07 / 2 - 1.266)) / 2;
+    const top = (dx: number) => {
+      const hit = sim.world.castRay(new RAPIER.Ray({ x: hubX('blue') + dx, y: 3, z }, { x: 0, y: -1, z: 0 }), 5, true);
+      return 3 - (hit?.timeOfImpact ?? 5);
+    };
+    expect(top(0)).toBeCloseTo(0.889, 2);
+    for (const side of [-1, 1]) {
+      // Half way down the slope, and at its foot.
+      expect(top(side * 0.332)).toBeCloseTo((0.889 + 0.4) / 2, 1);
+      expect(top(side * 0.55)).toBeCloseTo(0.4 + (0.489 * 0.014) / 0.464, 1);
+      // Past the end: the floor.
+      expect(top(side * 0.6)).toBeLessThan(0.05);
+    }
+    sim.dispose();
+  });
+
+  it('a shooter that cannot pass holds its fuel outside its zone', () => {
+    const noPass = robotWith([
+      { type: 'hopper', capacity: 10 },
+      { type: 'shooter', turret: true, speed: 16, pitch: 55, spread: 0, canPass: false },
+    ]);
+    const sim = new SimWorld(withSpawn({ x: 0, z: -2 }));
+    const robot = sim.addRobot(noPass);
+    run(sim, input(), 0.5);
+    const held = robot.held.length;
+    expect(held).toBeGreaterThan(0);
+    run(sim, input({ shoot: true }), 1);
+    expect(robot.held.length).toBe(held);
+    sim.dispose();
+  });
 
   it('a robot inside its zone shoots at the hub', () => {
     const sim = new SimWorld(rebuilt2026);

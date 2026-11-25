@@ -30,10 +30,10 @@
     "wheelBase": 0.39100505063388336,
     "trackWidth": 0.5710050506338834,
     "wheelRadius": 0.05,
-    "maxSpeed": 5,
-    "maxAccel": 12.5,
+    "maxSpeed": 4.7,
+    "maxAccel": 11,
     "grip": 1.2,
-    "maxAngularSpeed": 11
+    "maxAngularSpeed": 10
   },
   "subsystems": [
     {
@@ -72,6 +72,8 @@
       "moveAccuracy": 87,
       "turret": true,
       "turretSpeed": 930,
+      "turretRange": 360,
+      "canPass": true,
       "autoRange": true,
       "slowInAuto": false,
       "autoRate": 3,
@@ -87,6 +89,7 @@
       "sizeY": 0.31,
       "color": "#0d0d0d",
       "round": false,
+      "openTop": false,
       "cornerStyle": "chamfer",
       "cornerFL": 0,
       "cornerFR": 0,
@@ -113,6 +116,7 @@
       "sizeY": 0.31,
       "color": "#0d0d0d",
       "round": false,
+      "openTop": false,
       "cornerStyle": "chamfer",
       "cornerFL": 0,
       "cornerFR": 0,

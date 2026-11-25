@@ -1,6 +1,8 @@
 import { listRoom, unlistRoom } from '../account/account';
+import { hasRewardNow } from '../ui/passHooks';
 import { wornSkin } from '../pass/pass';
 import { findRobot } from '../robots';
+import { asOfficialSkin } from '../robots/cosmetic';
 import type { RobotDefinition } from '../robots/types';
 import type { SimWorld } from '../sim/world';
 import { useGame, type RoomView } from '../ui/store';
@@ -46,23 +48,29 @@ class Multiplayer {
     // A robot picked on the robot selector while in a room becomes this player's robot there.
     // Cosmetics changed on the Drive Pass screen, or a skin picked, reach the room at once.
     useGame.subscribe((state, previous) => {
-      const { skins, nameColor, badge, pieceEffect } = state.settings;
+      const { skins, nameColor, badge, pieceEffect, powerUp, owned } = state.settings;
       const before = previous.settings;
       const champion = state.champions !== previous.champions;
-      const changed = skins !== before.skins || nameColor !== before.nameColor || badge !== before.badge || pieceEffect !== before.pieceEffect;
+      const changed =
+        skins !== before.skins ||
+        nameColor !== before.nameColor ||
+        badge !== before.badge ||
+        pieceEffect !== before.pieceEffect ||
+        powerUp !== before.powerUp ||
+        owned !== before.owned;
       if (state.room && (champion || changed)) this.sendLook();
     });
     useGame.subscribe((state, previous) => {
       if (state.robotId === previous.robotId || !state.room) return;
       const id = this.myId();
-      if (id !== null) this.setRobot(id, findRobot(state.robotId, state.customRobots));
+      if (id !== null) this.setRobot(id, asOfficialSkin(findRobot(state.robotId, state.customRobots)));
     });
     if (typeof window !== 'undefined') window.addEventListener('pagehide', () => this.leave());
   }
 
   private me() {
     const { settings, robotId, customRobots, account } = useGame.getState();
-    return { name: settings.displayName, robot: findRobot(robotId, customRobots), accountId: account?.id };
+    return { name: settings.displayName, robot: asOfficialSkin(findRobot(robotId, customRobots)), accountId: account?.id };
   }
 
   /** This player's Drive Pass cosmetics. */
@@ -74,7 +82,14 @@ class Multiplayer {
         .map((robot) => [robot, wornSkin(robot, settings.skins, champions)])
         .filter((entry): entry is [string, string] => !!entry[1]),
     );
-    return { skins, nameColor: settings.nameColor, badge: settings.badge, pieceEffect: settings.pieceEffect };
+    return {
+      skins,
+      nameColor: settings.nameColor,
+      badge: settings.badge,
+      pieceEffect: settings.pieceEffect,
+      // A power-up goes out only if this player really has it.
+      powerUp: hasRewardNow(settings.powerUp) ? settings.powerUp : '',
+    };
   }
 
   /** Tells the room about this player's cosmetics. */

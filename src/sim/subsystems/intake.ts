@@ -132,7 +132,7 @@ class Intake implements Subsystem {
       if (gapX * gapX + gapY * gapY + gapZ * gapZ > pull * pull) continue;
 
       robot.store(sim, i);
-      this.cooldown = 1 / this.settings.rate;
+      this.cooldown = 1 / (this.settings.rate * robot.boost.intakeSpeed);
       return;
     }
   }

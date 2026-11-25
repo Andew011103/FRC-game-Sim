@@ -1,6 +1,7 @@
 import { configuredGame } from './games';
 import { robotStart } from './games/start';
 import { dressRobot, wornSkin } from './pass/pass';
+import { hasRewardNow } from './ui/passHooks';
 import { rankable, submitRun } from './account/leaderboard';
 import type { Alliance, Bonus, GameDefinition, StatusInfo } from './games/types';
 import { InputManager } from './input/manager';
@@ -13,6 +14,7 @@ import type { RobotDefinition } from './robots/types';
 import { SceneView, type Quality } from './render/scene';
 import type { QualitySetting } from './settings';
 import { findRobot } from './robots';
+import { asOfficialSkin } from './robots/cosmetic';
 import type { SimRobot } from './sim/robot';
 import { SIM_DT, SimWorld, initPhysics } from './sim/world';
 import { useGame, type AllianceView, type MatchResults, type MatchView } from './ui/store';
@@ -52,7 +54,7 @@ export interface EffectWindow {
   alliance: Alliance;
 }
 
-/** The empty floor a displayed robot stands on, for one alliance's bumper colour. */
+/** The empty floor a displayed robot stands on, for one alliance's bumper color. */
 const garageFor = (alliance: Alliance): GameDefinition => ({
   ...garage,
   spawns: [{ ...garage.spawns[0], alliance }],
@@ -61,6 +63,8 @@ const ALLIANCES: Alliance[] = ['blue', 'red'];
 
 /** Ties input, simulation and rendering together and runs the frame loop. */
 export class Game {
+  /** Whether the singleplayer match on the field allowed power-ups, used or not; such a match stays off the leaderboards. */
+  private powerUpsOn = false;
   private sim: SimWorld;
   private player: SimRobot | null = null;
   /** Identifies the field shown behind the menu, so it is only rebuilt when it changes. */
@@ -142,7 +146,7 @@ export class Game {
     this.view.setEffectWindows(windows);
   }
 
-  /** The colour of screens that show no field, so the 3D view matches the page around its boxes. */
+  /** The color of screens that show no field, so the 3D view matches the page around its boxes. */
   setBackground(color: string): void {
     this.view.setPlainColor(color);
   }
@@ -186,13 +190,17 @@ export class Game {
     const sim = new SimWorld(game, { mode, pauses: true });
     const spawnIndex = Math.max(0, game.spawns.findIndex((spawn) => spawn.alliance === alliance));
     // The robot wears the skin the player picked for it, if any.
+    // An official robot the player only changed the looks of plays, and ranks, as the official one.
     const robot = dressRobot(
-      findRobot(robotId, customRobots),
+      asOfficialSkin(findRobot(robotId, customRobots)),
       wornSkin(robotId, settings.skins, useGame.getState().champions),
       settings.pieceEffect,
+      // A power-up only comes along if this match allows them and the player really has it.
+      settings.singlePowerUps && hasRewardNow(settings.powerUp) ? settings.powerUp : null,
     );
     const player = sim.addRobot(robot, spawnIndex, robotStart(game, robot, alliance, startPose));
     this.replaceWorld(sim, player);
+    this.powerUpsOn = settings.singlePowerUps;
     this.input.release();
   }
 
@@ -259,7 +267,7 @@ export class Game {
     const state = useGame.getState();
     state.setLeaderboardNote(null);
     if (!online && this.player && results.timed) {
-      const why = rankable(this.player.def, results.timed);
+      const why = rankable(this.player.def, results.timed, this.powerUpsOn);
       if (why) state.setLeaderboardNote(why);
       else {
         const robotId = this.player.def.id;
@@ -329,6 +337,7 @@ export class Game {
     }
     // In multiplayer the driver stands at their own station; otherwise where the settings say.
     this.view.setDriverStation(this.netStation ?? settings.driverStation);
+    this.view.setAngledPitch(settings.angledPitch);
     const quality = this.chooseQuality(settings.quality, screen === 'playing' && visible, delta);
     this.view.setQuality(quality);
     this.view.setPieceEffects(settings.showPieceEffects);
@@ -390,6 +399,18 @@ export class Game {
           // A guest's copy of its robot is not simulated, so the host says what it can hold and how high it has climbed.
           capacity: client?.extras()?.capacity ?? this.player?.capacity() ?? 0,
           climbLevel: client?.extras()?.climbLevel ?? this.player?.climbLevel() ?? 0,
+          // A guest's copy of its robot hears where its power-up stands from the host.
+          power: this.player?.powerUp
+            ? {
+                icon: this.player.powerUp.icon,
+                image: this.player.powerUp.image,
+                color: this.player.powerUp.color,
+                duration: this.player.powerUp.duration,
+                active: this.player.power.active,
+                cooldown: this.player.power.cooldown,
+                usesLeft: Number.isFinite(this.player.power.usesLeft) ? this.player.power.usesLeft : null,
+              }
+            : null,
           simMs: this.simMs,
           drawMs: this.drawMs,
           quality,

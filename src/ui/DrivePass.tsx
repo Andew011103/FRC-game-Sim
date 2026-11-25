@@ -1,5 +1,25 @@
 import { useState } from 'react';
-import { PASS, REWARD_TYPES, RP_RULES, SEASON_DAYS, keptRewards, type DrivePass, type Reward, type RewardType, type ThemeColors, type Tier } from '../pass/pass';
+import {
+  PASS,
+  REWARD_TYPES,
+  RP_RULES,
+  SEASON_DAYS,
+  SHOP_ONLY_TYPES,
+  availableIds,
+  claim,
+  claimableIds,
+  keptRewards,
+  type DrivePass,
+  type Reward,
+  type RewardType,
+  type ThemeColors,
+  type Tier,
+} from '../pass/pass';
+import { BOOST_STATS, POWER_TIMINGS, describePowerUp, type PowerUp } from '../pass/powerups';
+import { RivetCount } from './Shop';
+import { Rivet } from './Rivet';
+import type { RobotWindow } from '../game';
+import { skinWindowId, useSkinWindows } from './skinWindows';
 import { OFFICIAL_ROBOTS, findRobot } from '../robots';
 import { LED_PATTERNS } from '../sim/subsystems/led';
 import { THEMES } from '../settings';
@@ -9,20 +29,28 @@ import { BadgeMark } from './BadgeMark';
 import { SeasonCountdown } from './Leaderboard';
 import { openSkinInBuilder } from './skins';
 import { EffectPicker, EffectPreview } from './EffectPicker';
+import { StyledName } from './StyledName';
+import { MAX_GRADIENT, NAME_EDGES, NAME_EFFECTS, NAME_SPEED, cleanNameStyle, describeNameStyle, type NameStyleFields } from '../pass/nameStyle';
 import { ALLIANCE_COLOR, PIECE_EFFECTS } from '../pass/effects';
 
 const TYPE_LABELS = Object.fromEntries(REWARD_TYPES.map(({ type, label }) => [type, label])) as Record<RewardType, string>;
 
 /** The Drive Pass: Ranking Points earned, and the road of rewards they unlock. */
-export function DrivePassScreen() {
+export function DrivePassScreen({ onWindows }: { onWindows: (windows: RobotWindow[]) => void }) {
   const setScreen = useGame((state) => state.setScreen);
   const rp = useRankingPoints();
   const unlocked = useUnlocked();
   const previewAll = useGame((state) => state.passPreviewAll);
+  const updateSettings = useGame((state) => state.updateSettings);
   const setPreviewAll = useGame((state) => state.setPassPreviewAll);
   const [editing, setEditing] = useState(false);
   const owned = useGame((state) => state.settings.owned);
   const kept = keptRewards(owned);
+  // What the player has really claimed, apart from trying rewards out while developing.
+  const claimed = availableIds(rp, owned);
+  const claimable = claimableIds(rp, owned);
+  const claimAll = () => updateSettings({ owned: claim(claimable, rp, owned) });
+  useSkinWindows(editing ? [] : [...PASS.tiers.map((tier) => tier.reward), ...kept], onWindows);
   const next = PASS.tiers.find((tier) => tier.rp > rp);
   const previous = [...PASS.tiers].reverse().find((tier) => tier.rp <= rp)?.rp ?? 0;
   const progress = next ? (rp - previous) / Math.max(1, next.rp - previous) : 1;
@@ -37,6 +65,7 @@ export function DrivePassScreen() {
         <span className="muted">
           {PASS.name} · ends in <SeasonCountdown />
         </span>
+        <RivetCount />
         {import.meta.env.DEV && (
           <button className="small" onClick={() => setEditing(!editing)} title="Only while developing">
             {editing ? 'Close the editor' : 'Edit rewards'}
@@ -53,6 +82,11 @@ export function DrivePassScreen() {
               <div>
                 <h2>Ranking Points this season</h2>
                 <p className="pass-rp">{rp.toLocaleString()} RP</p>
+                {claimable.length > 0 && (
+                  <button className="primary pass-claim-all" onClick={claimAll}>
+                    Claim {claimable.length === 1 ? 'your reward' : `all ${claimable.length} rewards`}
+                  </button>
+                )}
                 {next ? (
                   <>
                     <div className="pass-progress" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}>
@@ -88,18 +122,39 @@ export function DrivePassScreen() {
                 Treat every reward as unlocked, to try them out (only while developing)
               </label>
             )}
-            <div className="pass-road" data-clip>
-              {PASS.tiers.length === 0 && <p className="hint">No rewards yet.</p>}
-              {PASS.tiers.map((tier) => (
-                <RewardCard key={tier.reward.id} tier={tier} open={unlocked.has(tier.reward.id)} reached={rp >= tier.rp} />
-              ))}
+            {PASS.tiers.length === 0 && <p className="hint">No rewards yet.</p>}
+            <div className="pass-road pass-track" data-clip>
+              {PASS.tiers.map((tier, i) => {
+                // Each reward's marker is in the middle of its stretch of rail: the left half fills from the
+                // reward before, the right half on toward the next one.
+                const from = i === 0 ? 0 : PASS.tiers[i - 1].rp;
+                const to = PASS.tiers[i + 1]?.rp ?? tier.rp;
+                const part = (value: number, start: number, end: number) => Math.min(1, Math.max(0, (value - start) / Math.max(1, end - start)));
+                const fill = rp < tier.rp ? 0.5 * part(rp, from, tier.rp) : to > tier.rp ? 0.5 + 0.5 * part(rp, tier.rp, to) : 1;
+                const reached = rp >= tier.rp;
+                const state = claimed.has(tier.reward.id) ? 'claimed' : reached ? 'claimable' : 'locked';
+                return (
+                  <div className={`pass-step ${state}`} key={tier.reward.id}>
+                    <RewardCard
+                      tier={tier}
+                      state={state}
+                      preview={state !== 'claimed' && unlocked.has(tier.reward.id)}
+                      onClaim={() => updateSettings({ owned: claim([tier.reward.id], rp, owned) })}
+                    />
+                    <div className="pass-rail" aria-hidden>
+                      <div className="pass-rail-fill" style={{ width: `${Math.round(fill * 100)}%` }} />
+                      <span className={`pass-node${reached ? ' lit' : ''}`}>{tier.rp}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             {kept.length > 0 && (
               <>
                 <h2>Kept from earlier seasons</h2>
                 <div className="pass-road" data-clip>
                   {kept.map((reward) => (
-                    <RewardCard key={reward.id} tier={{ rp: -1, reward }} open reached />
+                    <RewardCard key={reward.id} tier={{ rp: -1, reward }} state="claimed" />
                   ))}
                 </div>
               </>
@@ -111,12 +166,10 @@ export function DrivePassScreen() {
   );
 }
 
-/** One reward on the road: what it is, what it needs, and equipping it once it is unlocked. */
-export function RewardCard({ tier, open, reached, label }: { tier: Tier; open: boolean; reached: boolean; label?: string }) {
-  const { reward } = tier;
+/** Whether a reward is on, and how to put it on or take it off; or a note for rewards that are not worn. */
+export function useEquip(reward: Reward): { equipped: boolean; equip: (() => void) | null; note: string | null } {
   const settings = useGame((state) => state.settings);
   const updateSettings = useGame((state) => state.updateSettings);
-
   let equipped = false;
   let equip: (() => void) | null = null;
   let note: string | null = null;
@@ -140,17 +193,50 @@ export function RewardCard({ tier, open, reached, label }: { tier: Tier; open: b
   } else if (reward.type === 'theme') {
     equipped = settings.theme === reward.id;
     equip = () => updateSettings({ theme: equipped ? 'srpp' : reward.id });
+  } else if (reward.type === 'powerUp') {
+    equipped = settings.powerUp === reward.id;
+    equip = () => updateSettings({ powerUp: equipped ? '' : reward.id });
+  } else if (reward.type === 'rivets') {
+    note = 'Added to your Rivets, to spend in the Shop.';
   } else {
     note = 'Use it on LED strips in the robot builder.';
   }
+  return { equipped, equip, note };
+}
+
+/**
+ * One reward: what it is and what it needs. Once reached it lights up to be
+ * claimed, and only once claimed can it be equipped. With `preview`, a reward
+ * not yet the player's can be tried on, while developing.
+ */
+export function RewardCard({
+  tier,
+  state,
+  preview = false,
+  onClaim,
+  label,
+}: {
+  tier: Tier;
+  state: 'claimed' | 'claimable' | 'locked';
+  preview?: boolean;
+  onClaim?: () => void;
+  label?: string;
+}) {
+  const { reward } = tier;
+  const { equipped, equip, note } = useEquip(reward);
+  const open = state === 'claimed' || preview;
 
   return (
-    <article className={`card pass-card${open ? ' open' : ''}${equipped ? ' equipped' : ''}`}>
+    <article className={`card pass-card ${state}${open ? ' open' : ''}${equipped ? ' equipped' : ''}`}>
       <span className="pass-card-rp">{label ?? (tier.rp >= 0 ? `${tier.rp} RP` : 'Kept')}</span>
       <span className="muted pass-card-type">{TYPE_LABELS[reward.type]}</span>
       <RewardPreview reward={reward} />
       <strong>{reward.name}</strong>
-      {!open ? (
+      {state === 'claimable' && onClaim ? (
+        <button className="primary pass-claim" onClick={onClaim}>
+          Claim
+        </button>
+      ) : !open ? (
         <span className="muted">🔒 Locked</span>
       ) : equip ? (
         <button className={equipped ? 'secondary' : 'primary'} onClick={equip}>
@@ -159,14 +245,28 @@ export function RewardCard({ tier, open, reached, label }: { tier: Tier; open: b
       ) : (
         <span className="hint">{note}</span>
       )}
-      {open && !reached && <span className="muted pass-card-preview">Previewing</span>}
+      {preview && state !== 'claimed' && <span className="muted pass-card-preview">Previewing</span>}
     </article>
   );
 }
 
-function RewardPreview({ reward }: { reward: Reward }) {
+export function RewardPreview({ reward }: { reward: Reward }) {
   const name = useGame((state) => state.settings.displayName);
-  if (reward.type === 'nameColor') return <span className="pass-preview pass-name" style={{ color: reward.color }}>{name}</span>;
+  if (reward.type === 'rivets') {
+    return (
+      <span className="pass-preview pass-rivets">
+        <Rivet /> +{reward.amount}
+      </span>
+    );
+  }
+  if (reward.type === 'powerUp') return <PowerUpPreview power={reward.powerUp} />;
+  if (reward.type === 'nameColor') {
+    return (
+      <span className="pass-preview pass-name">
+        <StyledName text={name} style={reward} />
+      </span>
+    );
+  }
   if (reward.type === 'badge') {
     return (
       <span className="pass-preview pass-badge">
@@ -191,14 +291,8 @@ function RewardPreview({ reward }: { reward: Reward }) {
   const robot = findRobot(reward.robotId);
   return (
     <span className="pass-preview pass-skin">
-      <span className="pass-swatches">
-        {[reward.color, ...(reward.recolors ?? []).flatMap((colors) => Object.values(colors ?? {}))]
-          .filter((color): color is string => !!color)
-          .slice(0, 6)
-          .map((color, i) => (
-          <i key={i} style={{ background: color }} />
-        ))}
-      </span>
+      {/* The robot wearing the skin, drawn in 3D over this box. */}
+      <span className="pass-skin-window" id={skinWindowId(reward.id)} />
       <span className="muted">
         for {robot.id === reward.robotId ? robot.name : reward.robotId}
         {(reward.extras?.length ?? 0) > 0 ? `, ${reward.extras.length} added parts` : ''}
@@ -208,11 +302,37 @@ function RewardPreview({ reward }: { reward: Reward }) {
   );
 }
 
+/** A power-up's mark in its color, and what it does. */
+export function PowerUpPreview({ power }: { power: PowerUp }) {
+  return (
+    <span className="pass-preview pass-power">
+      <i style={{ '--power': power.color } as React.CSSProperties}>
+        <PowerMark power={power} />
+      </i>
+      <span className="muted">{describePowerUp(power)}</span>
+    </span>
+  );
+}
+
+/** A power-up's picture, or its emoji or letters when it has none. */
+export function PowerMark({ power }: { power: { icon: string; image?: string } }) {
+  return power.image ? <img className="power-image" src={power.image} alt="" /> : <>{power.icon}</>;
+}
+
 /** A fresh reward of a type, with a new id. */
-function blankReward(type: RewardType): Reward {
+export function blankReward(type: RewardType): Reward {
   const id = `${type}-${Date.now().toString(36)}`;
+  if (type === 'rivets') return { type, id, name: '50 Rivets', amount: 50 };
+  if (type === 'powerUp') {
+    return {
+      type,
+      id,
+      name: 'New power-up',
+      powerUp: { icon: '⚡', color: '#38bdf8', duration: 5, cooldown: 25, uses: 3, boosts: { driveSpeed: 1.2 } },
+    };
+  }
   if (type === 'skin') return { type, id, name: 'New skin', robotId: OFFICIAL_ROBOTS[0]?.id ?? '', recolors: [], extras: [] };
-  if (type === 'nameColor') return { type, id, name: 'New name colour', color: '#38bdf8' };
+  if (type === 'nameColor') return { type, id, name: 'New name color', color: '#38bdf8' };
   if (type === 'badge') return { type, id, name: 'New badge', badge: '⭐' };
   if (type === 'led') return { type, id, name: 'New LED effect', pattern: LED_PATTERNS.find((p) => !p.free)?.value ?? 'strobe' };
   if (type === 'pieceEffect') return { type, id, name: 'New game piece effect', effect: { kind: 'glow', color: ALLIANCE_COLOR } };
@@ -390,7 +510,7 @@ function PassEditor({ onDone }: { onDone: () => void }) {
       ))}
       <div className="button-row">
         <select value={adding} onChange={(event) => setAdding(event.target.value as RewardType)} aria-label="Kind of reward to add">
-          {REWARD_TYPES.map(({ type, label }) => (
+          {REWARD_TYPES.filter(({ type }) => !SHOP_ONLY_TYPES.includes(type)).map(({ type, label }) => (
             <option key={type} value={type}>
               {label}
             </option>
@@ -433,14 +553,30 @@ function PassEditor({ onDone }: { onDone: () => void }) {
   );
 }
 
-function TierEditor({ tier, onChange, onRemove }: { tier: Tier; onChange: (tier: Tier) => void; onRemove: () => void }) {
+/**
+ * Changes one reward: what it costs (Ranking Points on the road, or Rivets in
+ * the Shop, as `cost` says), its name and id, and what it is.
+ */
+export function TierEditor({
+  tier,
+  onChange,
+  onRemove,
+  cost = 'RP',
+  onEditSkin,
+}: {
+  tier: Tier;
+  onChange: (tier: Tier) => void;
+  onRemove: () => void;
+  cost?: string;
+  onEditSkin?: () => void;
+}) {
   const { reward } = tier;
   const set = (change: Partial<Reward>) => onChange({ ...tier, reward: { ...reward, ...change } as Reward });
   return (
     <div className="pass-tier-editor">
       <div className="pass-tier-row">
         <label>
-          RP
+          {cost}
           <input type="number" min={0} step={10} value={tier.rp} onChange={(event) => onChange({ ...tier, rp: Math.max(0, Number(event.target.value) || 0) })} />
         </label>
         <span className="muted">{TYPE_LABELS[reward.type]}</span>
@@ -457,7 +593,7 @@ function TierEditor({ tier, onChange, onRemove }: { tier: Tier; onChange: (tier:
         </button>
       </div>
       <div className="pass-tier-row">
-        {reward.type === 'nameColor' && <ColorInput label="Name colour" value={reward.color} onChange={(color) => set({ color })} />}
+        {reward.type === 'nameColor' && <NameStyleEditor style={reward} onChange={(change) => set(change)} />}
         {reward.type === 'badge' && (
           <>
             <label>
@@ -499,6 +635,20 @@ function TierEditor({ tier, onChange, onRemove }: { tier: Tier; onChange: (tier:
           </label>
         )}
         {reward.type === 'pieceEffect' && <EffectPicker value={reward.effect} onChange={(effect) => effect && set({ effect })} />}
+        {reward.type === 'rivets' && (
+          <label>
+            Rivets given
+            <input
+              type="number"
+              min={1}
+              max={100000}
+              step={5}
+              value={reward.amount}
+              onChange={(event) => set({ amount: Math.max(1, Math.round(Number(event.target.value) || 1)) })}
+            />
+          </label>
+        )}
+        {reward.type === 'powerUp' && <PowerUpEditor power={reward.powerUp} onChange={(powerUp) => set({ powerUp })} />}
         {reward.type === 'theme' &&
           (Object.keys(reward.colors) as (keyof ThemeColors)[]).map((key) => (
             <label key={key}>
@@ -513,14 +663,180 @@ function TierEditor({ tier, onChange, onRemove }: { tier: Tier; onChange: (tier:
         {reward.type === 'skin' && (
           <>
             <span className="muted">
-              For {findRobot(reward.robotId).name}: {(reward.recolors ?? []).filter(Boolean).length} parts recoloured,{' '}
+              For {findRobot(reward.robotId).name}: {(reward.recolors ?? []).filter(Boolean).length} parts recolored,{' '}
               {reward.extras?.length ?? 0} added.
             </span>
-            <button className="small" onClick={() => openSkinInBuilder(reward.robotId, { id: reward.id, name: reward.name, rp: tier.rp })}>
+            <button className="small" onClick={() => (onEditSkin ? onEditSkin() : openSkinInBuilder(reward.robotId, { id: reward.id, name: reward.name, rp: tier.rp }))}>
               Edit in the robot builder
             </button>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Choosing what a power-up looks like, how long it lasts, and what it boosts, within fixed limits. */
+function PowerUpEditor({ power, onChange }: { power: PowerUp; onChange: (power: PowerUp) => void }) {
+  return (
+    <>
+      <label>
+        Mark (an emoji or letters)
+        <input type="text" maxLength={4} value={power.icon} onChange={(event) => onChange({ ...power, icon: event.target.value })} />
+      </label>
+      <label>
+        Or a picture (shown instead)
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void badgePicture(file).then((image) => onChange({ ...power, image }));
+            event.target.value = '';
+          }}
+        />
+      </label>
+      {power.image && (
+        <span className="pass-skin-part">
+          <span className="pass-power">
+            <i style={{ '--power': power.color } as React.CSSProperties}>
+              <PowerMark power={power} />
+            </i>
+          </span>
+          <button
+            className="small"
+            onClick={() => {
+              const { image: _old, ...rest } = power;
+              onChange(rest);
+            }}
+          >
+            Remove picture
+          </button>
+        </span>
+      )}
+      <ColorInput label="Glow color" value={power.color} onChange={(color) => onChange({ ...power, color })} />
+      {POWER_TIMINGS.map((timing) => (
+        <label key={timing.key}>
+          {timing.label}
+          {timing.unit && ` (${timing.unit})`}
+          <input
+            type="number"
+            min={timing.min}
+            max={timing.max}
+            step={timing.step}
+            value={power[timing.key]}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isFinite(value)) onChange({ ...power, [timing.key]: Math.min(timing.max, Math.max(timing.min, value)) });
+            }}
+          />
+        </label>
+      ))}
+      {BOOST_STATS.map((stat) => {
+        const current = power.boosts[stat.key] ?? 1;
+        return (
+          <label key={stat.key}>
+            {stat.label}: ×{current.toFixed(2)}
+            <input
+              type="range"
+              min={1}
+              max={stat.max}
+              step={0.05}
+              value={current}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                const boosts = { ...power.boosts };
+                if (value <= 1) delete boosts[stat.key];
+                else boosts[stat.key] = Math.round(value * 100) / 100;
+                onChange({ ...power, boosts });
+              }}
+            />
+          </label>
+        );
+      })}
+      <span className="muted">{describePowerUp(power)}</span>
+    </>
+  );
+}
+
+/**
+ * The look of a name color: its colors (one, or several for a gradient), an
+ * outline or glow, and an animation, with the name drawn as it will look.
+ */
+function NameStyleEditor({ style, onChange }: { style: NameStyleFields; onChange: (change: Partial<NameStyleFields>) => void }) {
+  const name = useGame((state) => state.settings.displayName) || 'Your name';
+  const clean = cleanNameStyle(style);
+  const gradient = clean.colors.slice(1);
+  const animated = clean.effect !== 'none';
+  return (
+    <div className="name-style-editor">
+      <div className="pass-tier-row">
+        <ColorInput label={gradient.length ? 'Color 1' : 'Name color'} value={style.color} onChange={(color) => onChange({ color })} />
+        {gradient.map((color, i) => (
+          <span key={i} className="pass-skin-part">
+            <ColorInput
+              label={`Color ${i + 2}`}
+              value={color}
+              onChange={(next) => onChange({ gradient: gradient.map((other, j) => (j === i ? next : other)) })}
+            />
+            <button className="small secondary" onClick={() => onChange({ gradient: gradient.filter((_, j) => j !== i) })} title="Remove this color">
+              ✕
+            </button>
+          </span>
+        ))}
+        {gradient.length < MAX_GRADIENT && (
+          <button className="small secondary" onClick={() => onChange({ gradient: [...gradient, gradient.at(-1) ?? clean.colors[0]] })}>
+            {gradient.length ? 'Add a color' : 'Make it a gradient'}
+          </button>
+        )}
+      </div>
+      <div className="pass-tier-row">
+        <label>
+          Edge
+          <select
+            value={clean.outline ? clean.edge : 'none'}
+            onChange={(event) =>
+              event.target.value === 'none'
+                ? onChange({ outline: '' })
+                : onChange({ edge: event.target.value as NameStyleFields['edge'], outline: clean.outline || '#000000' })
+            }
+          >
+            <option value="none">None</option>
+            {NAME_EDGES.map(({ id, label }) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {clean.outline && <ColorInput label="Edge color" value={clean.outline} onChange={(outline) => onChange({ outline })} />}
+        <label>
+          Animation
+          <select value={clean.effect} onChange={(event) => onChange({ effect: event.target.value as NameStyleFields['effect'] })}>
+            {NAME_EFFECTS.map(({ id, label }) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {animated && (
+          <label>
+            One cycle: {clean.speed.toFixed(1)} s
+            <input
+              type="range"
+              min={NAME_SPEED.least}
+              max={NAME_SPEED.most}
+              step={0.1}
+              value={clean.speed}
+              onChange={(event) => onChange({ speed: Number(event.target.value) })}
+            />
+          </label>
+        )}
+      </div>
+      <div className="name-style-sample">
+        <StyledName text={name} style={style} />
+        <span className="muted">{describeNameStyle(clean) || 'Plain color'}</span>
       </div>
     </div>
   );

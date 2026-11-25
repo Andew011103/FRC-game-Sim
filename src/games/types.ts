@@ -75,7 +75,7 @@ export interface Spawn {
   alliance: Alliance;
 }
 
-/** How a goal's lights look: steady, pulsing, alliance colour with a white light running round, all white, or dark. */
+/** How a goal's lights look: steady, pulsing, alliance color with a white light running round, all white, or dark. */
 export type GoalLight = 'on' | 'pulse' | 'chase' | 'white' | 'off';
 
 export interface StatusInfo {
@@ -120,7 +120,7 @@ export interface GameDefinition {
     length: number;
     width: number;
     wallHeight: number;
-    /** Depth of each alliance's coloured zone. */
+    /** Depth of each alliance's colored zone. */
     zoneDepth?: number;
     /** Where the blue driver stands along the alliance wall, for the driver camera. */
     driverStationZ?: number;

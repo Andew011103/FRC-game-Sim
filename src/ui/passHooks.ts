@@ -1,10 +1,25 @@
-import { allRewardIds, availableIds, championSkinFor, rankingPoints } from '../pass/pass';
+import { allRewardIds, availableIds, championSkinFor, rankingPoints, rivetBalance } from '../pass/pass';
 import { useGame } from './store';
 
 /** This player's Ranking Points this season, from their record (their account's when signed in). */
 export function useRankingPoints(): number {
   const award = useGame((state) => state.awardRp);
   return rankingPoints(useGame((state) => state.seasonRecord)) + award;
+}
+
+/** This player's Rivets to spend in the Shop. */
+export function useRivets(): number {
+  const rp = useRankingPoints();
+  const owned = useGame((state) => state.settings.owned);
+  return rivetBalance(rp, owned);
+}
+
+/** Outside the screens: whether this player really has a reward right now (or is trying every reward out, while developing). */
+export function hasRewardNow(id: string): boolean {
+  if (!id) return false;
+  const state = useGame.getState();
+  if (state.passPreviewAll) return true;
+  return availableIds(rankingPoints(state.seasonRecord) + state.awardRp, state.settings.owned).has(id);
 }
 
 /**

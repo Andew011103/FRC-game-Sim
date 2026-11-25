@@ -37,6 +37,61 @@ export function officialRobots() {
       });
 
       // The Drive Pass screen's editor saves the whole road of rewards here.
+      server.middlewares.use('/__changelog', (request, response) => {
+        if (request.method !== 'POST') {
+          response.statusCode = 405;
+          response.end();
+          return;
+        }
+        let body = '';
+        request.on('data', (chunk) => (body += chunk));
+        request.on('end', () => {
+          try {
+            const log = JSON.parse(body);
+            if (!Array.isArray(log.entries)) throw new Error('not a changelog');
+            const entries = log.entries.map((entry) => {
+              if (typeof entry.title !== 'string' || !entry.title.trim() || !Array.isArray(entry.changes)) throw new Error('bad entry');
+              const changes = entry.changes.filter((change) => typeof change === 'string' && change.trim());
+              const date = typeof entry.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) ? entry.date : undefined;
+              return { title: entry.title.trim(), ...(date ? { date } : {}), changes };
+            });
+            const file = resolve(server.config.root, 'src/changelog.json');
+            writeFileSync(file, `${JSON.stringify({ entries }, null, 2)}\n`);
+            response.statusCode = 200;
+            response.end('saved');
+          } catch {
+            response.statusCode = 400;
+            response.end('not saved');
+          }
+        });
+      });
+      server.middlewares.use('/__shop', (request, response) => {
+        if (request.method !== 'POST') {
+          response.statusCode = 405;
+          response.end();
+          return;
+        }
+        let body = '';
+        request.on('data', (chunk) => (body += chunk));
+        request.on('end', () => {
+          try {
+            const shop = JSON.parse(body);
+            if (!Array.isArray(shop.items)) throw new Error('not a shop');
+            for (const item of shop.items) {
+              if (typeof item.price !== 'number' || typeof item.reward?.id !== 'string' || typeof item.reward?.type !== 'string') {
+                throw new Error('bad item');
+              }
+            }
+            const file = resolve(server.config.root, 'src/pass/shop.json');
+            writeFileSync(file, `${JSON.stringify({ items: shop.items }, null, 2)}\n`);
+            response.statusCode = 200;
+            response.end('saved');
+          } catch {
+            response.statusCode = 400;
+            response.end('not saved');
+          }
+        });
+      });
       server.middlewares.use('/__drive-pass', (request, response) => {
         if (request.method !== 'POST') {
           response.statusCode = 405;

@@ -60,7 +60,10 @@ export class SimWorld {
     this.addFixedBox({ size: [length + 8, 1, width + 8], position: [0, -0.5, 0], color: '#000000' }, 0.9);
 
     this.statics = [...perimeterWalls(game), ...game.statics];
-    for (const element of this.statics) this.addFixedBox(element, 0.6);
+    // Walls and field structures are slick: their friction multiplies whatever touches them, so a
+    // robot's bumpers (0.25) slide along them at 0.25 x WALL_FRICTION instead of dragging, while
+    // robots still grip each other as before. The floor keeps its own grip for the fuel.
+    for (const element of this.statics) this.addFixedBox(element, WALL_FRICTION, RAPIER.CoefficientCombineRule.Multiply);
 
     for (const def of game.props) {
       const rot = quatFromEuler(...(def.rotation ?? [0, 0, 0]));
@@ -221,7 +224,7 @@ export class SimWorld {
     this.world.free();
   }
 
-  private addFixedBox(element: BoxElement, friction: number): void {
+  private addFixedBox(element: BoxElement, friction: number, combine = RAPIER.CoefficientCombineRule.Average): void {
     const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.fixed()
         .setTranslation(...element.position)
@@ -231,11 +234,19 @@ export class SimWorld {
     this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(sx / 2, sy / 2, sz / 2)
         .setFriction(friction)
+        .setFrictionCombineRule(combine)
         .setCollisionGroups(element.lowBar ? LOW_BAR_GROUPS : FIELD_GROUPS),
       body,
     );
   }
 }
+
+/**
+ * Friction of walls and field structures, multiplied by that of what touches
+ * them: 0.1 against a robot's bumpers, 0.2 against fuel. It was 0.43 against
+ * bumpers, which held a robot driving into a wall almost still.
+ */
+export const WALL_FRICTION = 0.4;
 
 function perimeterWalls(game: GameDefinition): BoxElement[] {
   const { length, width, wallHeight: h } = game.field;

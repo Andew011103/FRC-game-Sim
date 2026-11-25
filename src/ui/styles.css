@@ -349,7 +349,7 @@ kbd {
   }
 }
 
-/* Scoreboard: the bar across the top, laid out like the official audience display. Its colours are the display's own, not the palette's. */
+/* Scoreboard: the bar across the top, laid out like the official audience display. Its colors are the display's own, not the palette's. */
 
 .scorebar {
   position: fixed;
@@ -1870,7 +1870,7 @@ option {
   pointer-events: none;
 }
 
-/* A robot's EPA: a rounded tag coloured by where it ranks among official robots. */
+/* A robot's EPA: a rounded tag colored by where it ranks among official robots. */
 .epa-tag {
   display: inline-block;
   padding: 2px 8px;
@@ -1983,6 +1983,10 @@ option {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+.custom-tag.barred {
+  color: #fecaca;
+  background: rgba(220, 38, 38, 0.35);
 }
 .player-chip-robot select {
   flex: 1;
@@ -2266,6 +2270,90 @@ option {
 .pass-name {
   font-weight: 800;
   font-size: 18px;
+}
+/* A name drawn with a name color cosmetic: its animations, like the LED patterns. */
+.styled-name {
+  display: inline-block;
+}
+.name-glare {
+  animation: name-glare var(--name-speed, 2s) linear infinite;
+}
+@keyframes name-glare {
+  0% {
+    background-position: 100% 0, 0 0;
+  }
+  65%,
+  100% {
+    background-position: 0% 0, 0 0;
+  }
+}
+.name-blink {
+  animation: name-blink var(--name-speed, 2s) steps(1, end) infinite;
+}
+@keyframes name-blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+.name-breathe {
+  animation: name-breathe var(--name-speed, 2s) ease-in-out infinite;
+}
+@keyframes name-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+.name-chase > span {
+  display: inline-block;
+  opacity: 0.4;
+  animation: name-chase var(--name-speed, 2s) linear infinite;
+}
+@keyframes name-chase {
+  0% {
+    opacity: 1;
+    text-shadow: 0 0 0.35em currentColor;
+    transform: translateY(-0.04em);
+  }
+  18%,
+  100% {
+    opacity: 0.4;
+    text-shadow: none;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .styled-name,
+  .styled-name > span {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+.name-style-editor {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.name-style-editor button {
+  width: auto;
+}
+.name-style-sample {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--raised);
+  font-size: 20px;
+}
+.name-style-sample .muted {
+  font-size: 12px;
 }
 .pass-badge {
   font-size: 30px;
@@ -2627,7 +2715,7 @@ option {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  /* --piece is the fuel's own colour with its share of the effect's; --halo the glow around it. */
+  /* --piece is the fuel's own color with its share of the effect's; --halo the glow around it. */
   background: var(--piece);
   box-shadow: 0 0 10px 4px var(--halo);
   animation: pass-piece-fly 1.6s linear infinite;
@@ -2737,7 +2825,7 @@ option {
 .home-player:hover:not(:disabled) {
   border-color: var(--accent);
 }
-/* The Drive Pass stands out in its own colour, whatever the theme. */
+/* The Drive Pass stands out in its own color, whatever the theme. */
 .home-pass {
   color: #f5e9ff;
   background: linear-gradient(135deg, #4c1d95, #7e22ce 55%, #a21caf);
@@ -2785,4 +2873,320 @@ option {
   font-size: 12px;
   color: #cbd5e1;
   pointer-events: none;
+}
+
+/* The Shop stands out in its own color too: polished brass, for Rivets. */
+.home-shop {
+  color: #1f1300;
+  background: linear-gradient(135deg, #b7791f, #f6c445 55%, #fde68a);
+  border: 1px solid #fcd34d;
+  box-shadow: 0 0 18px rgba(246, 196, 69, 0.4);
+  font-weight: 700;
+}
+.home-shop:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: 0 0 26px rgba(252, 211, 77, 0.6);
+}
+/* A rivet: a domed brass head. */
+.rivet {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  vertical-align: -0.2em;
+  flex: none;
+}
+.rivet-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(246, 196, 69, 0.45);
+  background: rgba(246, 196, 69, 0.08);
+}
+.pass-rivets {
+  font-size: 22px;
+  font-weight: 800;
+  color: #f6c445;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pass-power {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  height: auto;
+}
+.pass-power i {
+  font-style: normal;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  background: color-mix(in srgb, var(--power) 22%, transparent);
+  border: 2px solid var(--power);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--power) 60%, transparent);
+}
+.pass-power .muted {
+  font-size: 12px;
+}
+.shop-card .pass-card-rp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.shop-buy:disabled {
+  font-size: 13px;
+}
+/* The power-up in a match: its mark, and whether it is ready, on, recharging or used up. */
+.hud-power {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 170px;
+}
+.hud-power-mark {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  border: 2px solid var(--power);
+  background: conic-gradient(color-mix(in srgb, var(--power) 45%, transparent) var(--fill), transparent 0);
+}
+.hud-power.ready .hud-power-mark {
+  box-shadow: 0 0 14px color-mix(in srgb, var(--power) 70%, transparent);
+}
+.hud-power.on .hud-power-mark {
+  box-shadow: 0 0 22px var(--power);
+}
+.hud-power.spent {
+  opacity: 0.55;
+}
+.hud-power-text {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+/* Everything for sale is shown at full strength, bought or not. */
+.pass-card.shop-card {
+  opacity: 1;
+}
+.changelog-date {
+  margin: -4px 0 8px;
+  font-size: 13px;
+}
+.changelog-editor {
+  display: grid;
+  gap: 12px;
+}
+.changelog-entry-editor {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.changelog-title-input {
+  flex: 1 1 240px;
+}
+.changelog-title-input input {
+  width: 100%;
+}
+.changelog-change {
+  display: flex;
+  gap: 6px;
+  align-items: start;
+}
+.changelog-change textarea {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+}
+.changelog-editor input[type='date'] {
+  padding: 5px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.changelog-add-change {
+  justify-self: start;
+}
+.changelog-editor button {
+  width: auto;
+  flex: none;
+}
+.changelog-editor .button-row {
+  justify-content: flex-start;
+}
+.shop-order {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.shop-slot {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+.shop-slot > .shop-card {
+  height: 100%;
+}
+.shop-slot-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.shop-slot-label.empty {
+  visibility: hidden;
+}
+.shop-group + .shop-group {
+  margin-top: 18px;
+}
+.shop-group-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.shop-grid {
+  flex-wrap: wrap;
+}
+/* A power-up's picture fills its round mark. */
+.power-image {
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+  border-radius: 50%;
+}
+/* A figure for something the robot does not have: a grayed-out, empty bar. */
+.stat.not-applicable {
+  opacity: 0.45;
+}
+.stat.not-applicable .stat-bar {
+  background: repeating-linear-gradient(135deg, var(--raised) 0 6px, transparent 6px 12px);
+  border: 1px solid var(--border);
+}
+
+/* The Drive Pass road: every reward sits on one rail that fills as Ranking Points are earned. */
+.pass-track {
+  gap: 0;
+  padding-bottom: 14px;
+}
+.pass-step {
+  flex: 0 0 196px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 10px;
+  padding: 0 8px;
+}
+.pass-step .pass-card {
+  flex: none;
+}
+.pass-rail {
+  position: relative;
+  height: 8px;
+  margin: 0 -8px;
+  background: var(--raised);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.pass-step:first-child .pass-rail {
+  border-radius: 4px 0 0 4px;
+}
+.pass-step:last-child .pass-rail {
+  border-radius: 0 4px 4px 0;
+}
+.pass-rail-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.pass-node {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  min-width: 30px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.pass-node.lit {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+/* A reward ready to claim lights up and gently pulses. */
+.pass-card.claimable {
+  opacity: 1;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 22px color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: pass-claimable 1.6s ease-in-out infinite;
+}
+@keyframes pass-claimable {
+  50% {
+    box-shadow: 0 0 0 1px var(--accent), 0 0 34px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pass-card.claimable {
+    animation: none;
+  }
+}
+.pass-claim-all {
+  margin: 4px 0 10px;
+}
+/* A skin's robot, drawn in 3D over this box. */
+.pass-skin-window {
+  display: block;
+  width: 100%;
+  height: 110px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+/* The 3D view is drawn behind the page, so a card showing a skin's robot lets it through. */
+.pass-card:has(.pass-skin-window) {
+  background: transparent;
+  backdrop-filter: none;
+}
+.pass-skin {
+  width: 100%;
+}
+/* Tabs that sit in a screen's header, so nothing needs scrolling to reach. */
+.screen-tabs {
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.cosmetics .screen-tabs {
+  margin: 0 0 14px;
+}
+.cosmetics-grid {
+  flex-wrap: wrap;
+  overflow-x: visible;
 }

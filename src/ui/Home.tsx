@@ -6,8 +6,8 @@ const ENTRIES: { label: string; screen: Screen | null; note?: string }[] = [
   { label: 'Singleplayer', screen: 'singleplayer' },
   { label: 'Multiplayer', screen: 'multiplayer' },
   { label: 'Leaderboard', screen: 'leaderboard' },
-  { label: 'Update logs', screen: 'updates' },
-  { label: 'Change game', screen: null, note: 'Coming later' },
+  { label: 'Changelog', screen: 'changelog' },
+  { label: 'Change game', screen: null, note: 'Coming soon' },
   { label: 'Settings', screen: 'settings' },
 ];
 
@@ -25,6 +25,9 @@ export function Home() {
   return (
     <div className="home">
       <nav className="home-top">
+        <button className="home-shop" disabled={!ready} onClick={() => setScreen('shop')}>
+          Shop
+        </button>
         <button className="home-pass" disabled={!ready} onClick={() => setScreen('pass')}>
           Drive Pass
         </button>

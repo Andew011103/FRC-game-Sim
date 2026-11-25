@@ -29,6 +29,20 @@ interface ShooterSettings extends Shape {
   moveAccuracy: number;
   turret: boolean;
   turretSpeed: number;
+  /**
+   * How far the turret can turn in all, in degrees, half each way from its
+   * face. 360 turns all the way round. Less makes a limited turret, or under
+   * 60 a turreted dumper: a wide shooter that swings a little to aim, and
+   * turns the robot once the target is past that.
+   */
+  turretRange: number;
+  /** Whether it can pass pieces back into its alliance zone from elsewhere on the field. */
+  canPass: boolean;
+  /**
+   * With several fixed shooters, the one the robot turns toward the target.
+   * The others fire along with it once it is lined up. With none chosen, the first one leads.
+   */
+  aimsRobot: boolean;
   autoRange: boolean;
   slowInAuto: boolean;
   autoRate: number;
@@ -43,6 +57,10 @@ const DEG = Math.PI / 180;
 const FACE_ANGLE: Record<Side, number> = { front: 0, left: 90, back: 180, right: -90 };
 /** How hard a fixed shooter's robot turns toward its target: turn rate per radian of error. */
 const TURN_GAIN = 8;
+/** Seconds over which the robot's motion is smoothed before shots are led for it. */
+const DRIFT_SMOOTHING = 0.1;
+/** A turreted dumper turns the robot to bring the target back within this share of its swing. */
+const DUMPER_RECENTER = 0.7;
 /** A fixed shooter holds its fire until the robot points this close to the target. */
 const FIRE_WINDOW = 3 * DEG;
 /** A piece leaves this far along the launch direction from the top of the box. */
@@ -92,6 +110,8 @@ interface Aim {
   speed: number;
   /** Launch angle above level, in radians. */
   pitch: number;
+  /** True when it should not fire at all: out of its zone with a shooter that cannot pass. */
+  hold?: boolean;
 }
 
 /**
@@ -129,6 +149,23 @@ class Shooter implements Subsystem {
   private lastBearing: number | null = null;
   /** How fast the target direction is moving round the robot, in radians per second. */
   private sweep = 0;
+  /** The robot's ground velocity, smoothed, for leading shots while it moves. */
+  private drift: Vec3 = v3(0, 0, 0);
+  /** A turreted dumper's swing each way, in radians; null for a fixed shooter or a full turret. */
+  private readonly swing: number | null;
+  /** Whether a turreted dumper is swung as far as it goes and still not on target. */
+  private atLimit = false;
+  /** Whether it was lined up with its target on its last step. Other fixed shooters follow the leading one's. */
+  private linedUp = false;
+
+  /**
+   * The fixed shooter the robot turns to the target: the one chosen to aim the
+   * robot, or else the first. Turrets aim themselves and are never it.
+   */
+  private leader(ctx: SubsystemContext): Shooter | null {
+    const fixed = ctx.robot.subsystems.filter((part): part is Shooter => part instanceof Shooter && !part.settings.turret);
+    return fixed.find((shooter) => shooter.settings.aimsRobot) ?? fixed[0] ?? null;
+  }
 
   constructor(
     private readonly settings: ShooterSettings,
@@ -144,6 +181,7 @@ class Shooter implements Subsystem {
     this.laneSpacing = across / settings.lanes;
     this.parts = [shapePart(settings, robot)];
     this.cooldowns = new Array<number>(settings.lanes).fill(0);
+    this.swing = settings.turret && settings.turretRange < 360 ? (settings.turretRange / 2) * DEG : null;
   }
 
   /**
@@ -155,8 +193,13 @@ class Shooter implements Subsystem {
     const s = this.settings;
     const muzzle = add(robot.position(), rotate(robot.rotation(), this.muzzle));
     const aim = sim.aimFor(robot.alliance, muzzle, robot);
-    this.aimingToPass = aim?.pass === true;
     const fixedPitch = s.pitch * DEG;
+    // A shooter that cannot pass holds its pieces outside its own zone.
+    if (aim?.pass && !s.canPass) {
+      this.aimingToPass = false;
+      return { muzzle, bearing: null, speed: s.speed, pitch: fixedPitch, hold: true };
+    }
+    this.aimingToPass = aim?.pass === true;
     if (!aim) return { muzzle, bearing: null, speed: s.speed, pitch: fixedPitch };
     const target = aim.point;
     // A pass is lobbed to a spot on the floor, so its speed always suits the distance.
@@ -171,7 +214,10 @@ class Shooter implements Subsystem {
 
     // Aim at where the target appears to be once the robot's motion is taken off the shot.
     const share = s.moveAccuracy / 100;
-    const drift = robot.pointVelocity(muzzle);
+    // A fixed shooter turns the whole robot to aim, so it leads for the robot's motion smoothed: the aim
+    // point glides instead of jumping whenever the speed jitters or the robot changes direction, which
+    // would set the robot swinging from side to side. A turret turns itself, quickly, so it leads exactly.
+    const drift = s.turret ? robot.pointVelocity(muzzle) : this.drift;
     let point = target;
     let shot = launch(point);
     for (let i = 0; i < 3 && share > 0; i++) {
@@ -185,21 +231,40 @@ class Shooter implements Subsystem {
 
   /** For a fixed shooter: how fast the robot should turn so its shooting face points at the target. */
   chassisTurn(ctx: SubsystemContext): number | null {
-    if (this.settings.turret) return null;
+    if (this.settings.turret && this.swing === null) return null;
+    // Only one fixed shooter steers the robot; the others leave it to that one.
+    if (!this.settings.turret && this.leader(ctx) !== this) return null;
     const { bearing } = this.solve(ctx);
     if (bearing === null) return null;
-    const error = wrapAngle(bearing - ctx.robot.heading() - this.yaw);
     // Following a target that is moving round the robot takes "Shoot on the Move".
     // Smoothed, because the robot's speed (and with it the aim) jitters from step to step.
     const measured = this.lastBearing === null ? 0 : wrapAngle(bearing - this.lastBearing) / ctx.dt;
     this.sweep += (measured - this.sweep) * 0.2;
     this.lastBearing = bearing;
-    return TURN_GAIN * error + (this.settings.moveAccuracy / 100) * this.sweep;
+    const lead = (this.settings.moveAccuracy / 100) * this.sweep;
+    if (this.swing !== null) {
+      // A turreted dumper leaves the robot to the driver while its own swing reaches the target.
+      // Past that, the robot turns until the target is comfortably inside the swing again.
+      const fromFace = wrapAngle(bearing - ctx.robot.heading() - this.restYaw);
+      const reach = this.swing * DUMPER_RECENTER;
+      if (Math.abs(fromFace) <= this.swing && !this.atLimit) return null;
+      const excess = fromFace - clamp(fromFace, -reach, reach);
+      return TURN_GAIN * excess + lead;
+    }
+    const error = wrapAngle(bearing - ctx.robot.heading() - this.yaw);
+    return TURN_GAIN * error + lead;
   }
 
   step(ctx: SubsystemContext): void {
     const { sim, robot, input, dt } = ctx;
     const s = this.settings;
+    const velocity = robot.body.linvel();
+    const follow = Math.min(1, dt / DRIFT_SMOOTHING);
+    this.drift = v3(
+      this.drift.x + (velocity.x - this.drift.x) * follow,
+      0,
+      this.drift.z + (velocity.z - this.drift.z) * follow,
+    );
     const aim = this.solve(ctx);
     const share = s.moveAccuracy / 100;
     if (!input.shoot) {
@@ -214,11 +279,17 @@ class Shooter implements Subsystem {
       error = wrapAngle(aim.bearing - heading - this.yaw);
       if (s.turret) {
         const maxStep = s.turretSpeed * DEG * dt;
-        const turn = clamp(error, -maxStep, maxStep);
+        let turn = clamp(error, -maxStep, maxStep);
+        if (this.swing !== null) {
+          // A turreted dumper only swings so far either side of its face.
+          const from = wrapAngle(this.yaw - this.restYaw);
+          turn = clamp(from + turn, -this.swing, this.swing) - from;
+        }
         this.yaw = wrapAngle(this.yaw + turn);
         error -= turn;
       }
     }
+    this.atLimit = this.swing !== null && Math.abs(error) > FIRE_WINDOW;
     // The box turns with the turret, so it faces what it is aiming at.
     this.parts[0].yaw = this.yaw - this.restYaw;
 
@@ -228,13 +299,18 @@ class Shooter implements Subsystem {
     // cannot keep up with a moving aim fires anyway, as far behind as it normally trails.
     const trailing = (1.5 * (1 - share) * Math.abs(this.sweep)) / TURN_GAIN;
     // Some robots are set to fire at a different rate while they drive themselves.
-    const rate = s.slowInAuto && sim.match?.phase.id === 'auto' ? s.autoRate : s.rate;
+    const rate = (s.slowInAuto && sim.match?.phase.id === 'auto' ? s.autoRate : s.rate) * robot.boost.fireRate;
     const wasFiring = this.firing;
     // A turret normally fires while it is still turning. Given an aim delay, it lines up first, like a fixed shooter.
-    const lined = !robot.autoAim || Math.abs(error) <= FIRE_WINDOW + trailing || (s.turret && s.aimDelay <= 0);
+    // A turreted dumper swung as far as it goes waits for the robot, like a fixed shooter.
+    const ownLined = !robot.autoAim || Math.abs(error) <= FIRE_WINDOW + trailing || (s.turret && s.aimDelay <= 0 && !this.atLimit);
+    this.linedUp = ownLined && aim.bearing !== null;
+    // A fixed shooter that does not steer the robot fires once the one that does is lined up.
+    const leader = s.turret ? this : this.leader(ctx);
+    const lined = leader && leader !== this ? !robot.autoAim || leader.linedUp : ownLined;
     // Once lined up, it waits out its aim delay before the first shot, and again whenever it loses the target.
-    this.linedUpFor = input.shoot && lined ? this.linedUpFor + dt : 0;
-    this.firing = input.shoot && lined && this.linedUpFor >= s.aimDelay - 1e-9;
+    this.linedUpFor = input.shoot && lined && !aim.hold ? this.linedUpFor + dt : 0;
+    this.firing = input.shoot && lined && !aim.hold && this.linedUpFor >= s.aimDelay - 1e-9;
     if (!this.firing) return;
 
     if (!wasFiring) {
@@ -309,6 +385,9 @@ class Shooter implements Subsystem {
     this.yaw = this.restYaw;
     this.lastBearing = null;
     this.sweep = 0;
+    this.drift = v3(0, 0, 0);
+    this.atLimit = false;
+    this.linedUp = false;
     this.parts[0].yaw = 0;
   }
 }
@@ -343,6 +422,25 @@ export const shooterSpec: SubsystemSpec = {
     { key: 'moveAccuracy', label: 'Shoot on the Move', kind: 'number', default: 50, min: 0, max: 100, step: 1, unit: '%' },
     { key: 'turret', label: 'Turret', kind: 'boolean', default: false },
     { key: 'turretSpeed', label: 'Turret turn speed', kind: 'number', default: 360, min: 30, max: 1080, step: 10, unit: '°/s', showIf: 'turret' },
+    {
+      key: 'turretRange',
+      label: 'Turret range in all, half each way (360° turns all the way; under 60° is a turreted dumper; past its range, the robot turns)',
+      kind: 'number',
+      default: 360,
+      min: 10,
+      max: 360,
+      step: 1,
+      unit: '°',
+      showIf: 'turret',
+    },
+    { key: 'canPass', label: 'Can pass back into its alliance zone', kind: 'boolean', default: true },
+    {
+      key: 'aimsRobot',
+      label: 'Aims the robot (with several fixed shooters, the robot turns this one to the target and the others fire with it; with none chosen, the first does)',
+      kind: 'boolean',
+      default: false,
+      hideIf: 'turret',
+    },
     { key: 'autoRange', label: 'Adjusts speed and angle for distance', kind: 'boolean', default: false },
     { key: 'slowInAuto', label: 'Different fire rate in auto', kind: 'boolean', default: false },
     { key: 'autoRate', label: 'Fire rate in auto, each lane', kind: 'number', default: 3, min: 0.5, max: 32, unit: 'pieces/s', showIf: 'slowInAuto' },

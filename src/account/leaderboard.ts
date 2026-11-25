@@ -16,7 +16,7 @@ export interface BoardRow {
   place: number;
   userId: string;
   name: string;
-  /** Drive Pass name colour and badge reward ids, for showing the name as the player styled it. */
+  /** Drive Pass name color and badge reward ids, for showing the name as the player styled it. */
   nameColor: string;
   badge: string;
   robotId: string;
@@ -43,9 +43,10 @@ export function standardRules(gameId: string, options: Record<string, unknown> |
 }
 
 /** Whether a finished singleplayer run can go on the leaderboards, and if not, why. */
-export function rankable(robot: RobotDefinition, timed: boolean): string | null {
+export function rankable(robot: RobotDefinition, timed: boolean, powerUps = false): string | null {
   const { gameId, gameOptions, account } = useGame.getState();
   if (!timed) return 'Only timed matches go on the leaderboards.';
+  if (powerUps) return 'Matches with power-ups allowed do not go on the leaderboards.';
   if (!robot.official) return 'Custom robots do not go on the leaderboards.';
   if (!standardRules(gameId, gameOptions[gameId])) return 'Only matches with the standard rules go on the leaderboards.';
   if (!account) return 'Sign in to put your runs on the leaderboards.';

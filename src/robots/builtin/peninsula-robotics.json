@@ -45,9 +45,9 @@
       "sizeZ": 0.66,
       "sizeY": 0.18,
       "color": "#454545",
-      "rate": 17.7,
+      "rate": 18,
       "reach": 0.07,
-      "outtake": true,
+      "outtake": false,
       "outtakeDirection": "away",
       "outtakeSpeed": 3.7
     },
@@ -99,9 +99,12 @@
       "moveAccuracy": 90,
       "turret": true,
       "turretSpeed": 930,
+      "turretRange": 360,
+      "canPass": true,
+      "aimsRobot": false,
       "autoRange": true,
       "slowInAuto": true,
-      "autoRate": 18,
+      "autoRate": 10,
       "tiltCorrection": true
     },
     {

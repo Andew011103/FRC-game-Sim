@@ -2,7 +2,7 @@ import { OFFICIAL_ROBOTS } from '.';
 import type { RobotDefinition } from './types';
 
 // EPA rates how strong an official robot is, from 0.0 to 100.0, so players can
-// pick evenly matched alliances. Only official robots have one. Its colour
+// pick evenly matched alliances. Only official robots have one. Its color
 // says where it stands among all official robots: red below the median, white
 // at the median, blue at the top quarter and magenta in the top tenth.
 
@@ -19,7 +19,7 @@ export function epaOf(robot: RobotDefinition): number | null {
   return cleanEpa(robot.epa) ?? null;
 }
 
-/** The colour scale, by share of robots below: the four given colours at the bottom, median, top quarter and top tenth. */
+/** The color scale, by share of robots below: the four given colors at the bottom, median, top quarter and top tenth. */
 const STOPS: [number, string][] = [
   [0, '#DF7A86'],
   [0.17, '#EBA27A'],
@@ -57,7 +57,7 @@ export function epaRank(epa: number, all: number[] = officialEpas()): number {
   return place(below) + t * (place(sorted[above]) - place(below));
 }
 
-/** The colour for an EPA. */
+/** The color for an EPA. */
 export function epaColor(epa: number, all?: number[]): string {
   const rank = epaRank(epa, all);
   const next = STOPS.findIndex(([at]) => at >= rank);

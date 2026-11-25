@@ -30,7 +30,7 @@ describe('Drive Pass', () => {
     expect(skinsFor(robot.id).some((other) => other.id === skin.id)).toBe(true);
     const worn = applySkin(robot, skin.id);
     expect(worn.color).toBe(skin.color);
-    // The robot's own parts change only in colour; anything added is a see-through structure or a light. A game piece effect is only drawn.
+    // The robot's own parts change only in color; anything added is a see-through structure or a light. A game piece effect is only drawn.
     const colorless = (part: Record<string, unknown>) =>
       Object.fromEntries(Object.entries(part).filter(([key]) => !(key === 'color' || key.endsWith('Color') || key.endsWith('Accent'))));
     const strip = (r: typeof robot, parts: number) =>
@@ -55,7 +55,7 @@ describe('Drive Pass', () => {
 describe('LED strips', () => {
   beforeAll(() => initPhysics());
 
-  it('show the colour and pattern for what the robot is doing', () => {
+  it('show the color and pattern for what the robot is doing', () => {
     expect(patternColor('solid', '#ff0000', 1.234)).toBe('#ff0000');
     expect(patternColor('flash', '#ff0000', 0.1)).toBe('#ff0000');
     expect(patternColor('flash', '#ff0000', 0.3)).toBe('#111111');
@@ -86,7 +86,7 @@ describe('LED strips', () => {
 describe('cosmetics in multiplayer', () => {
   beforeAll(() => initPhysics());
 
-  it('everyone sees a player’s skin, name colour and badge', () => {
+  it('everyone sees a player’s skin, name color and badge', () => {
     const host = new HostSession('Host', findRobot('simbotics'));
     const [hostEnd, clientEnd] = loopback();
     host.accept(hostEnd);
@@ -94,7 +94,7 @@ describe('cosmetics in multiplayer', () => {
     const guest = new ClientSession(clientEnd, 'Guest', findRobot(skin.robotId));
     guest.request({ type: 'look', look: { skins: { [skin.robotId]: skin.id }, nameColor: 'name-gold', badge: 'badge-crown', pieceEffect: 'effect-flame' } });
     const seen = guest.room!.players.find((player) => player.id === guest.id)!;
-    expect(seen.look).toEqual({ skins: { [skin.robotId]: skin.id }, nameColor: 'name-gold', badge: 'badge-crown', pieceEffect: 'effect-flame' });
+    expect(seen.look).toEqual({ skins: { [skin.robotId]: skin.id }, nameColor: 'name-gold', badge: 'badge-crown', pieceEffect: 'effect-flame', powerUp: '' });
     const sim = host.start('rebuilt-2026', {}, 'practice', 2);
     expect(sim.robots[host.robotOf(guest.id!)].def.color).toBe(skin.color);
     expect(guest.sim!.robots[guest.robotIndex].def.color).toBe(skin.color);
@@ -107,14 +107,14 @@ describe('cosmetics in multiplayer', () => {
 describe('skins made in the builder', () => {
   beforeAll(() => initPhysics());
 
-  it('keep only colours and see-through parts, so they cannot change how a robot plays', async () => {
+  it('keep only colors and see-through parts, so they cannot change how a robot plays', async () => {
     const { skinFrom } = await import('../src/pass/pass');
     const base = findRobot('simbotics');
     const clean = { ...sanitizeRobot({ ...base, id: undefined })!, id: base.id };
     const draft = {
       ...clean,
       color: '#123456',
-      // A recolour, and a sneaky change to how fast it shoots, which must not survive.
+      // A recolor, and a sneaky change to how fast it shoots, which must not survive.
       subsystems: [
         ...clean.subsystems.map((subsystem, i) => (i === 0 ? { ...subsystem, color: '#ff00ff', rate: 99 } : subsystem)),
         { type: 'structure', solid: true, sizeX: 0.2, sizeY: 0.5, sizeZ: 0.2, color: '#00ff00' },
@@ -152,7 +152,7 @@ describe('LED effects', () => {
 
 describe('Drive Pass seasons', () => {
   it('a new season starts from zero, and keeps what was unlocked before, but not badges', async () => {
-    const { availableIds } = await import('../src/pass/pass');
+    const { availableIds, claim } = await import('../src/pass/pass');
     const old = [
       { rp: 5, reward: { type: 'nameColor' as const, id: 'old-name', name: 'Old name', color: '#ff0000' } },
       { rp: 10, reward: { type: 'badge' as const, id: 'old-badge', name: 'Old badge', badge: 'X' } },
@@ -167,14 +167,32 @@ describe('Drive Pass seasons', () => {
       tiers: [{ rp: 3, reward: { type: 'badge' as const, id: 'new-badge', name: 'New badge', badge: 'Y' } }],
       past: [{ id: 'season-1', name: 'Season 1', tiers: old }],
     };
-    // Last season this player unlocked the name colour and the badge.
+    // Last season this player unlocked the name color and the badge.
     const owned = { 'old-name': 'season-1', 'old-badge': 'season-1' };
     const now = availableIds(0, owned, pass);
     expect(now.has('old-name')).toBe(true);
     expect(now.has('old-badge')).toBe(false);
     expect(now.has('old-never')).toBe(false);
     expect(now.has('new-badge')).toBe(false);
-    expect(availableIds(3, owned, pass).has('new-badge')).toBe(true);
+    // Reaching it is not enough: it is the player's once claimed.
+    expect(availableIds(3, owned, pass).has('new-badge')).toBe(false);
+    expect(availableIds(3, claim(['new-badge'], 3, owned, pass), pass).has('new-badge')).toBe(true);
+  });
+
+  it('a reward lights up to be claimed once reached, and only then can be claimed', async () => {
+    const { claim, claimableIds, seasonMark } = await import('../src/pass/pass');
+    const tiers = [
+      { rp: 10, reward: { type: 'nameColor' as const, id: 'gold', name: 'Gold', color: '#ffcc00' } },
+      { rp: 20, reward: { type: 'rivets' as const, id: 'r20', name: '20 Rivets', amount: 20 } },
+    ];
+    const pass = { id: 'season-9', name: 'S9', startedAt: '2026-11-23T08:00:00.000Z', endsAt: '2026-12-23T08:00:00.000Z', champions: [], tiers, past: [] };
+    expect(claimableIds(5, {}, pass)).toEqual([]);
+    expect(claimableIds(15, {}, pass)).toEqual(['gold']);
+    // Asking for one not yet reached claims nothing.
+    expect(claim(['r20'], 15, {}, pass)).toEqual({});
+    const owned = claim(['gold', 'r20'], 25, {}, pass);
+    expect(owned).toEqual({ gold: seasonMark(pass), r20: seasonMark(pass) });
+    expect(claimableIds(25, owned, pass)).toEqual([]);
   });
 
   it('moving a season start forgets rewards reached before it', async () => {
@@ -185,7 +203,7 @@ describe('Drive Pass seasons', () => {
     expect(availableIds(0, { gold: 'season-1' }, pass).has('gold')).toBe(false);
     // Reached since the new start.
     expect(availableIds(0, { gold: seasonMark(pass) }, pass).has('gold')).toBe(true);
-    expect(availableIds(10, {}, pass).has('gold')).toBe(true);
+    expect(availableIds(10, {}, pass).has('gold')).toBe(false);
     // Once that season is over, only what was reached since its start is kept.
     const next = { ...pass, id: 'season-2', startedAt: '2026-12-23T08:00:00.000Z', tiers: [], past: [{ id: 'season-1', name: 'Season 1', startedAt: pass.startedAt, tiers }] };
     expect(availableIds(0, { gold: 'season-1' }, next).has('gold')).toBe(false);
