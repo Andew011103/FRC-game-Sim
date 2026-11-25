@@ -1,5 +1,4 @@
-import { outlineOf } from '../robots/chassis';
-import { fitsUnder } from '../robots/stats';
+import { fitsUnder, reachOf } from '../robots/stats';
 import type { RobotDefinition } from '../robots/types';
 import type { Alliance, Area, GameDefinition } from './types';
 
@@ -68,8 +67,10 @@ export function robotStart(
   station = 1,
 ): Pose {
   const pose = want ?? stationSpot(game, alliance, station);
-  const outline = outlineOf(robot.chassis);
-  const half = { x: (outline.front + outline.back) / 2, z: (outline.left + outline.right) / 2 };
+  // Its bumpers, or any part that sticks out past them, so nothing starts inside a field structure.
+  // Taken from the centre the farther way, so a robot that reaches further to the front still fits.
+  const reach = reachOf(robot);
+  const half = { x: Math.max(reach.front, reach.back), z: Math.max(reach.left, reach.right) };
   const { length, width } = game.field;
   const areas = game.startAreas?.(alliance, fitsUnder(robot, game.field.lowBarClearance ?? 0)) ?? [
     { minX: -length / 2, maxX: length / 2, minZ: -width / 2, maxZ: width / 2 },

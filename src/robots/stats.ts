@@ -1,6 +1,7 @@
 import { SUBSYSTEM_SPECS } from '../sim/subsystems';
 import { resolveSettings, turnedHalfHeight, type Turn } from '../sim/subsystems/types';
-import { frameTop } from './chassis';
+import { frameTop, outlineOf } from './chassis';
+import { isDecoration } from './spec';
 import type { RobotDefinition } from './types';
 
 // Figures worked out from a robot's data alone, for the robot selector and
@@ -17,6 +18,26 @@ function resolvedParts(def: RobotDefinition): Parts {
 }
 
 const num = (value: unknown): number => (typeof value === 'number' ? value : 0);
+
+/**
+ * How far the robot reaches out from its centre each way on the floor: its
+ * bumpers, or any solid part that sticks out past them. Parts only for looks
+ * are left out.
+ */
+export function reachOf(def: RobotDefinition): { front: number; back: number; left: number; right: number } {
+  const reach = outlineOf(def.chassis);
+  for (const part of resolvedParts(def)) {
+    if (isDecoration(part as { type: string; solid?: unknown })) continue;
+    if (typeof part.sizeX !== 'number' || typeof part.sizeZ !== 'number') continue;
+    const x = num(part.x);
+    const z = num(part.z);
+    reach.front = Math.max(reach.front, x + part.sizeX / 2);
+    reach.back = Math.max(reach.back, -(x - part.sizeX / 2));
+    reach.right = Math.max(reach.right, z + part.sizeZ / 2);
+    reach.left = Math.max(reach.left, -(z - part.sizeZ / 2));
+  }
+  return reach;
+}
 
 /** Height of the tallest fixed part of the robot above the carpet. Parts that fold away are not counted. */
 export function robotHeight(def: RobotDefinition): number {
