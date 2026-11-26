@@ -1,6 +1,7 @@
 import { SUBSYSTEM_SPECS } from '../sim/subsystems';
 import { resolveSettings, turnedHalfHeight, type Turn } from '../sim/subsystems/types';
 import { frameTop, outlineOf } from './chassis';
+import { averageRate } from '../sim/subsystems/shooter';
 import { isDecoration } from './spec';
 import type { RobotDefinition } from './types';
 
@@ -107,7 +108,20 @@ export function robotStats(def: RobotDefinition): Stat[] {
   const shooters = parts.filter((part) => part.type === 'shooter');
   const intakes = parts.filter((part) => part.type === 'intake');
   const hoppers = parts.filter((part) => part.type === 'hopper');
-  const fireRate = shooters.reduce((sum, part) => sum + num(part.lanes) * num(part.rate), 0);
+  // A shooter that fires in bursts counts at its average rate, bursts included.
+  const fireRate = shooters.reduce(
+    (sum, part) =>
+      sum +
+      num(part.lanes) *
+        averageRate({
+          rate: num(part.rate),
+          burst: part.burst === true,
+          burstRate: num(part.burstRate),
+          burstFrequency: num(part.burstFrequency),
+          burstLength: num(part.burstLength),
+        }),
+    0,
+  );
   const intakeRate = intakes.reduce((sum, part) => sum + num(part.rate), 0);
   const capacity = hoppers.reduce(
     (sum, part) => sum + (part.expandable === true ? Math.max(num(part.capacity), num(part.expandedCapacity)) : num(part.capacity)),

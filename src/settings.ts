@@ -25,6 +25,7 @@ export type Control =
   | 'block'
   | 'climb'
   | 'powerUp'
+  | 'humanDrop'
   | 'fieldCentric'
   | 'camera'
   | 'reset'
@@ -48,6 +49,7 @@ export const CONTROLS: { id: Control; label: string; stick?: string }[] = [
   { id: 'block', label: 'Blocker' },
   { id: 'climb', label: 'Climb: hold to go up, hold again to come down' },
   { id: 'powerUp', label: 'Use your power-up' },
+  { id: 'humanDrop', label: 'Human player: drop the chute onto the field (singleplayer)' },
   { id: 'fieldCentric', label: 'Switch control mode' },
   { id: 'camera', label: 'Switch camera' },
   { id: 'reset', label: 'Reset the field' },
@@ -157,6 +159,7 @@ export const DEFAULT_SETTINGS: Settings = {
     block: 'KeyK',
     climb: 'KeyK',
     powerUp: 'KeyG',
+    humanDrop: 'KeyH',
     fieldCentric: 'KeyF',
     camera: 'KeyC',
     reset: 'KeyR',
@@ -180,6 +183,7 @@ export const DEFAULT_SETTINGS: Settings = {
     block: 1,
     climb: 12,
     powerUp: 13,
+    humanDrop: 14,
     fieldCentric: 4,
     camera: 5,
     reset: 3,

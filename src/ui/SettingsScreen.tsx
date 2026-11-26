@@ -277,8 +277,8 @@ export function SettingsScreen() {
           </div>
           <h3>Speed presets</h3>
           <p className="hint">
-            Keys {settings.speedPresets.map((_, i) => keyLabel(settings.keys[`speed${i + 1}` as 'speed1'])).join(', ')} hold driving to
-            these shares of top speed, the same for every robot; press the same key again for full speed. Slower driving makes
+            Keys {settings.speedPresets.map((_, i) => keyLabel(settings.keys[`speed${i + 1}` as 'speed1'])).join(', ')} hold driving and
+            turning to these shares of top speed, the same for every robot; press the same key again for full speed. Slower driving makes
             shooting on the move more accurate.
           </p>
           <div className="fields">

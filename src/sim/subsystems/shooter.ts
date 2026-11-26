@@ -49,6 +49,26 @@ interface ShooterSettings extends Shape {
   tiltCorrection: boolean;
   /** Seconds the shooter waits once it is lined up before the first shot. */
   aimDelay: number;
+  /**
+   * Bursts, as from a spinning indexer that pieces drop into: now and then,
+   * at random, each lane fires at `burstRate` instead of `rate` for about
+   * `burstLength` seconds. `burstFrequency` is how many bursts start a second, on average.
+   */
+  burst: boolean;
+  burstRate: number;
+  burstFrequency: number;
+  burstLength: number;
+}
+
+/**
+ * How many pieces a second each lane of a shooter fires on average over a
+ * long run, bursts included. Bursts never overlap, so the share of time
+ * spent in one is the burst length over the time from one burst to the next.
+ */
+export function averageRate(settings: { rate: number; burst?: boolean; burstRate?: number; burstFrequency?: number; burstLength?: number }): number {
+  if (!settings.burst || !settings.burstFrequency || !settings.burstLength) return settings.rate;
+  const share = settings.burstLength / (settings.burstLength + 1 / settings.burstFrequency);
+  return settings.rate * (1 - share) + (settings.burstRate ?? settings.rate) * share;
 }
 
 const GRAVITY = 9.81;
@@ -157,6 +177,13 @@ class Shooter implements Subsystem {
   private atLimit = false;
   /** Whether it was lined up with its target on its last step. Other fixed shooters follow the leading one's. */
   private linedUp = false;
+  /** Seconds left in the burst it is firing, or 0 between bursts. */
+  private burstLeft = 0;
+
+  /** Whether it is firing a burst right now. */
+  get bursting(): boolean {
+    return this.burstLeft > 0;
+  }
 
   /**
    * The fixed shooter the robot turns to the target: the one chosen to aim the
@@ -298,8 +325,20 @@ class Shooter implements Subsystem {
     // driver has taken over the aiming). A robot that
     // cannot keep up with a moving aim fires anyway, as far behind as it normally trails.
     const trailing = (1.5 * (1 - share) * Math.abs(this.sweep)) / TURN_GAIN;
+    // Bursts come and go at random while it fires; between them, it fires at its usual rate.
+    if (s.burst && this.firing) {
+      if (this.burstLeft > 0) this.burstLeft = Math.max(0, this.burstLeft - dt);
+      else if (sim.random() < s.burstFrequency * dt) {
+        this.burstLeft = s.burstLength * (0.5 + sim.random());
+        // A faster burst starts at once, not after the wait left from the usual rate.
+        for (let lane = 0; lane < s.lanes; lane++) this.cooldowns[lane] = Math.min(this.cooldowns[lane], 1 / s.burstRate);
+      }
+    } else {
+      this.burstLeft = 0;
+    }
     // Some robots are set to fire at a different rate while they drive themselves.
-    const rate = (s.slowInAuto && sim.match?.phase.id === 'auto' ? s.autoRate : s.rate) * robot.boost.fireRate;
+    const usual = this.burstLeft > 0 ? s.burstRate : s.slowInAuto && sim.match?.phase.id === 'auto' ? s.autoRate : s.rate;
+    const rate = usual * robot.boost.fireRate;
     const wasFiring = this.firing;
     // A turret normally fires while it is still turning. Given an aim delay, it lines up first, like a fixed shooter.
     // A turreted dumper swung as far as it goes waits for the robot, like a fixed shooter.
@@ -388,6 +427,7 @@ class Shooter implements Subsystem {
     this.drift = v3(0, 0, 0);
     this.atLimit = false;
     this.linedUp = false;
+    this.burstLeft = 0;
     this.parts[0].yaw = 0;
   }
 }
@@ -418,6 +458,39 @@ export const shooterSpec: SubsystemSpec = {
     { key: 'rate', label: 'Fire rate, each lane', kind: 'number', default: 6, min: 0.5, max: 32, unit: 'pieces/s' },
     { key: 'spread', label: 'Inaccuracy', kind: 'number', default: 1.5, min: 0, max: 15, unit: '°' },
     { key: 'timingJitter', label: 'Uneven shot timing', kind: 'number', default: 30, min: 0, max: 90, step: 1, unit: '%' },
+    { key: 'burst', label: 'Fires in bursts (a spinning indexer)', kind: 'boolean', default: false },
+    {
+      key: 'burstRate',
+      label: 'Fire rate in a burst, each lane (higher or lower than usual)',
+      kind: 'number',
+      default: 12,
+      min: 0.5,
+      max: 40,
+      unit: 'pieces/s',
+      showIf: 'burst',
+    },
+    {
+      key: 'burstFrequency',
+      label: 'Bursts, on average',
+      kind: 'number',
+      default: 0.5,
+      min: 0.05,
+      max: 5,
+      step: 0.05,
+      unit: 'per s',
+      showIf: 'burst',
+    },
+    {
+      key: 'burstLength',
+      label: 'Burst length, on average (each is half to one and a half times this)',
+      kind: 'number',
+      default: 0.5,
+      min: 0.1,
+      max: 3,
+      step: 0.05,
+      unit: 's',
+      showIf: 'burst',
+    },
     { key: 'aimDelay', label: 'Aim delay: wait once lined up before shooting', kind: 'number', default: 0, min: 0, max: 3, step: 0.05, unit: 's' },
     { key: 'moveAccuracy', label: 'Shoot on the Move', kind: 'number', default: 50, min: 0, max: 100, step: 1, unit: '%' },
     { key: 'turret', label: 'Turret', kind: 'boolean', default: false },

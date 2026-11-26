@@ -26,7 +26,7 @@ const BASIC_ROBOT: RobotDefinition = {
     wheelBase: 0.56,
     trackWidth: 0.56,
     wheelRadius: 0.05,
-    maxSpeed: 4.5,
+    maxSpeed: 4.05,
     maxAccel: 9,
     grip: 1.1,
     maxAngularSpeed: 8,

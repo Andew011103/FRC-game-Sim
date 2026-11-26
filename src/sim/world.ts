@@ -38,6 +38,8 @@ export class SimWorld {
   readonly statics: BoxElement[];
   /** Repeatable random numbers for anything in the simulation that varies. */
   readonly random: () => number;
+  /** Whether drivers can have their human player drop the chute. Off in multiplayer. */
+  humanDrops = true;
 
   /** The game's scoring logic and the match clock; both null for games without rules. */
   readonly rules: GameRules | null;

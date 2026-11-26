@@ -22,6 +22,8 @@ export interface DriverInput {
   climbDown: boolean;
   /** Pressed to switch on the power-up equipped from the Shop. */
   powerUp: boolean;
+  /** Pressed to have the alliance's human player drop the fuel in their chute onto the field. */
+  humanDrop: boolean;
 }
 
 export const NEUTRAL_INPUT: DriverInput = {
@@ -36,6 +38,7 @@ export const NEUTRAL_INPUT: DriverInput = {
   climbUp: false,
   climbDown: false,
   powerUp: false,
+  humanDrop: false,
 };
 
 export type InputAction = 'toggleFieldCentric' | 'cycleCamera' | 'reset' | 'pause' | 'speed1' | 'speed2' | 'speed3';

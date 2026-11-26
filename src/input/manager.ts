@@ -90,6 +90,7 @@ export class InputManager {
       climbUp: climb && !this.climbDown,
       climbDown: climb && this.climbDown,
       powerUp: held('powerUp'),
+      humanDrop: held('humanDrop'),
     };
     this.tapped.clear();
     return result;

@@ -68,6 +68,26 @@ export interface HumanPlayer {
 
 /** How a throw leaves the human player's hands, and how far off a bad throw is. */
 const THROW = { height: 1.5, pitch: (62 * Math.PI) / 180, missAim: [0.07, 0.16], missSpeed: [0.06, 0.14] };
+/**
+ * The chute above each outpost, holding up to 24 fuel as 4 rows of 6. One
+ * press of a driver's key has the human player let go of all of it: the rows
+ * drop one after another, 6 side by side each time, onto the field in front of
+ * the outpost, where a robot with an open-top hopper can catch them. The human
+ * player then fills it again from what they hold, a few pieces a second, and
+ * only throws at the hub once that is done.
+ */
+const CHUTE = {
+  capacity: 24,
+  refillPerSecond: 2,
+  /** Pieces side by side in a row, and the gap between them. */
+  row: 6,
+  spacing: 0.16,
+  /** Seconds between rows: long enough for one row to move out of the next one's way. */
+  rowGap: 0.15,
+  height: 1.0,
+  speed: 1.6,
+  fromWall: 0.15,
+};
 /** Fuel this close to the alliance wall, in front of the outpost opening, has been pushed in. */
 const OUTPOST_DEPTH = 0.16;
 /** How fast an outpost takes in fuel pushed into it. */
@@ -177,11 +197,23 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
 
   /** The alliance whose hub goes dark in shifts 1 and 3. Decided once auto's last shots are counted. */
   let firstInactive: Alliance | null = null;
-  /** Fuel each human player is holding, and the time until their next throw. */
-  const humanPlayer: Record<Alliance, { fuel: number[]; wait: number; intakeWait: number }> = {
-    blue: { fuel: [], wait: 0, intakeWait: 0 },
-    red: { fuel: [], wait: 0, intakeWait: 0 },
+  /**
+   * Fuel each human player is holding and the time until their next throw;
+   * how much of it is in the chute, whether they are filling it again after a
+   * drop, and how much of a drop is still pouring out.
+   */
+  type HumanState = {
+    fuel: number[];
+    wait: number;
+    intakeWait: number;
+    chute: number;
+    refilling: boolean;
+    refillWait: number;
+    pouring: number;
+    pourWait: number;
   };
+  const freshHuman = (): HumanState => ({ fuel: [], wait: 0, intakeWait: 0, chute: 0, refilling: false, refillWait: 0, pouring: 0, pourWait: 0 });
+  const humanPlayer: Record<Alliance, HumanState> = { blue: freshHuman(), red: freshHuman() };
 
   /** Fuel inside each hub, on its way through. */
   let inHub: { piece: number; goal: Goal; wait: number }[] = [];
@@ -226,6 +258,54 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
     humanPlayer[alliance].fuel.push(piece);
   };
 
+  /**
+   * The chute: answers a driver's press by pouring out everything in it, a
+   * piece at a time in quick succession, then fills it again from what the
+   * human player holds. Without a drop, it simply holds whatever they have, up to its capacity.
+   */
+  const runChute = (sim: SimWorld, alliance: Alliance, playing: boolean): void => {
+    const player = humanPlayer[alliance];
+    const full = Math.min(CHUTE.capacity, player.fuel.length);
+    // Between drops, the chute holds whatever the human player has, up to its capacity.
+    if (!player.refilling && player.pouring === 0) player.chute = full;
+    const asked = sim.robots.some((robot) => robot.alliance === alliance && robot.humanDropAsked);
+    if (asked && playing && player.pouring === 0 && player.chute > 0) {
+      player.pouring = player.chute;
+      player.chute = 0;
+      player.refilling = true;
+      player.refillWait = 1 / CHUTE.refillPerSecond;
+    }
+
+    if (player.pouring > 0) {
+      player.pourWait = Math.max(0, player.pourWait - SIM_DT);
+      if (player.pourWait === 0 && player.fuel.length > 0) {
+        // The next row: up to 6 side by side across the outpost, all let go together.
+        const e = end(alliance);
+        const jitter = (size: number) => (sim.random() - 0.5) * 2 * size;
+        const count = Math.min(CHUTE.row, player.pouring, player.fuel.length);
+        for (let k = 0; k < count; k++) {
+          const across = (k - (count - 1) / 2) * CHUTE.spacing;
+          sim.pieces.release(
+            player.fuel.shift()!,
+            v3(e * (HALF_LENGTH - CHUTE.fromWall), CHUTE.height, -e * OUTPOST.z + across),
+            v3(-e * (CHUTE.speed + jitter(0.1)), 0, jitter(0.1)),
+          );
+        }
+        player.pouring -= count;
+        player.pourWait = CHUTE.rowGap;
+      }
+      if (player.fuel.length === 0) player.pouring = 0;
+    } else if (player.refilling) {
+      player.refillWait = Math.max(0, player.refillWait - SIM_DT);
+      if (player.refillWait === 0 && player.chute < full) {
+        player.chute += 1;
+        player.refillWait = 1 / CHUTE.refillPerSecond;
+      }
+      if (player.chute >= full) player.refilling = false;
+    }
+    player.chute = Math.min(player.chute, player.fuel.length);
+  };
+
   /** Takes in fuel pushed into an outpost and has its human player throw it at the hub. */
   const runOutpost = (sim: SimWorld, alliance: Alliance, skill: HumanPlayer): void => {
     const { pieces } = sim;
@@ -250,9 +330,13 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
       }
     }
 
-    player.wait = Math.max(0, player.wait - SIM_DT);
     const playing = !sim.match || (!sim.match.finished && !sim.match.phase.extra);
-    if (player.wait > 0 || player.fuel.length === 0 || !playing || !hubActive(sim, alliance)) return;
+    runChute(sim, alliance, playing);
+
+    player.wait = Math.max(0, player.wait - SIM_DT);
+    // The human player only throws while they have nothing else to do: not pouring the chute out or filling it.
+    const idle = !player.refilling && player.pouring === 0;
+    if (!idle || player.wait > 0 || player.fuel.length === 0 || !playing || !hubActive(sim, alliance)) return;
 
     // A lob from behind the wall toward the top of the hub. A good throw is on
     // target; a bad one is off to one side and too long or too short.
@@ -352,6 +436,8 @@ export function createRebuiltRules(setup: { humanPlayer: HumanPlayer | null; fou
       if (setup.humanPlayer) {
         for (const alliance of ALLIANCES) runOutpost(sim, alliance, setup.humanPlayer);
       }
+      // A press counts once, whether or not the human player could drop just then.
+      for (const robot of sim.robots) robot.humanDropAsked = false;
     },
 
     phaseEnded(sim, phase) {

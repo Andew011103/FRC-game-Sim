@@ -46,13 +46,13 @@ export const CHASSIS_FIELDS: FieldSpec[] = [...FRAME_FIELDS, ...BUMPER_FIELDS];
 
 export const DRIVE_FIELDS: Record<'swerve' | 'tank', FieldSpec[]> = {
   swerve: [
-    { key: 'maxSpeed', label: 'Top speed', kind: 'number', default: 5, min: 1, max: 8, step: 0.1, unit: 'm/s' },
+    { key: 'maxSpeed', label: 'Top speed', kind: 'number', default: 4.5, min: 1, max: 8, step: 0.1, unit: 'm/s' },
     { key: 'maxAccel', label: 'Acceleration', kind: 'number', default: 10, min: 2, max: 20, step: 0.5, unit: 'm/s²' },
     { key: 'grip', label: 'Tyre grip', kind: 'number', default: 1.15, min: 0.6, max: 1.6 },
     { key: 'maxAngularSpeed', label: 'Turn speed', kind: 'number', default: 9, min: 2, max: 16, step: 0.5, unit: 'rad/s' },
   ],
   tank: [
-    { key: 'maxSpeed', label: 'Top speed', kind: 'number', default: 4.3, min: 1, max: 8, step: 0.1, unit: 'm/s' },
+    { key: 'maxSpeed', label: 'Top speed', kind: 'number', default: 3.9, min: 1, max: 8, step: 0.1, unit: 'm/s' },
     { key: 'maxAccel', label: 'Acceleration', kind: 'number', default: 8, min: 2, max: 20, step: 0.5, unit: 'm/s²' },
     { key: 'grip', label: 'Tyre grip', kind: 'number', default: 1.1, min: 0.6, max: 1.6 },
     { key: 'lateralGrip', label: 'Sideways grip', kind: 'number', default: 0.35, min: 0.1, max: 1 },

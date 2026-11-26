@@ -317,6 +317,8 @@ export function decodeInput(buffer: ArrayBuffer): { input: DriverInput; prefs: D
 export function buildNetWorld(setup: MatchSetup): SimWorld {
   const game = configuredGame(setup.gameId, setup.options);
   const sim = new SimWorld(game, { mode: setup.mode, seed: setup.seed, robots: setup.players.length, pauses: true });
+  // Multiplayer has no human player drop: its inputs keep to one byte of buttons.
+  sim.humanDrops = false;
   for (const player of setup.players) {
     const { alliance, station } = player.seat;
     const spawnIndex = Math.max(0, game.spawns.findIndex((spawn) => spawn.alliance === alliance));

@@ -1,12 +1,21 @@
 {
   "entries": [
     {
+      "title": "Speed Presets and HP update",
+      "date": "2026-11-25",
+      "changes": [
+        "Burst fire for shooters with spinning indexers",
+        "Robot top speeds scaled down 10%",
+        "Speed presets slow turning too",
+        "Human player drops the 24 balls if you press H"
+      ]
+    },
+    {
       "title": "Angled above, Ordering",
       "date": "2026-11-24",
       "changes": [
         "Angled Above View",
         "Shop categorization",
-        "Robots with several fixed shooters fire from all of them: the robot turns the shooter chosen to aim it (or else the first) to the target, and the rest fire along with it.",
         "Fuel drawn at its true size",
         "Sloped trench blocks",
         "Robots slide along walls instead of sticking",

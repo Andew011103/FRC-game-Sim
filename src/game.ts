@@ -329,11 +329,12 @@ export class Game {
     const { settings, screen } = state;
     const driverInput = this.input.read(this.player?.climbing ?? false);
     if (settings.constantIntake) driverInput.intake = true;
-    // A speed preset holds driving (not turning) to its share of top speed.
+    // A speed preset holds driving and turning to its share of top speed.
     if (state.speedPreset !== null) {
       const share = (settings.speedPresets[state.speedPreset] ?? 100) / 100;
       driverInput.driveX *= share;
       driverInput.driveY *= share;
+      driverInput.turn *= share;
     }
     // In multiplayer the driver stands at their own station; otherwise where the settings say.
     this.view.setDriverStation(this.netStation ?? settings.driverStation);

@@ -21,6 +21,7 @@ const HINTS: { controls: Control[]; label: string; stick?: string; needs?: strin
   { controls: ['deploy'], label: 'Expand hopper', needs: 'hopper', setting: 'expandable' },
   { controls: ['block'], label: 'Blocker', needs: 'blocker' },
   { controls: ['climb'], label: 'Climb up / down', needs: 'climber' },
+  { controls: ['humanDrop'], label: 'Human player drop' },
   { controls: ['fieldCentric'], label: 'Control mode' },
   { controls: ['camera'], label: 'Camera' },
   { controls: ['reset'], label: 'Reset field' },
@@ -28,8 +29,10 @@ const HINTS: { controls: Control[]; label: string; stick?: string; needs?: strin
   { controls: ['pause'], label: 'Pause' },
 ];
 
-function controlsFor(robot: RobotDefinition) {
+function controlsFor(robot: RobotDefinition, online: boolean) {
   return HINTS.filter((control) => {
+    // Multiplayer has no human player drop.
+    if (online && control.controls.includes('humanDrop')) return false;
     if (!control.needs) return true;
     return robot.subsystems.some(
       (subsystem) => subsystem.type === control.needs && (!control.setting || subsystem[control.setting] === true),
@@ -50,6 +53,7 @@ export function Hud() {
   const isSwerve = robot.drivetrain.type === 'swerve';
   const heading = ((Math.round(-telemetry.headingDeg) % 360) + 360) % 360;
   const watching = useGame((state) => state.watching);
+  const room = useGame((state) => state.room);
   if (watching) return <WatchingHud />;
 
   return (
@@ -97,7 +101,7 @@ export function Hud() {
 
       {settings.showControls && (
       <div className="panel hud-keys">
-        {controlsFor(robot).map((control) => (
+        {controlsFor(robot, room !== null).map((control) => (
           <span key={control.label}>
             <kbd>
               {telemetry.gamepad

@@ -40,6 +40,9 @@ export class SimRobot {
   climbing = false;
   /** The power-up its driver equipped from the Shop, if any. */
   readonly powerUp: PowerUp | null;
+  /** Set when this robot's driver presses the human player's drop key, until the game's rules take it. */
+  humanDropAsked = false;
+  private humanDropHeld = false;
   /** Where that power-up stands: on, recharging, and uses left this match. */
   power: PowerState;
   /** Each stat's multiplier right now: all 1 unless a power-up is on. */
@@ -198,6 +201,9 @@ export class SimRobot {
     this.prevRot = this.rotation();
 
     this.stepPower(input);
+    // A press asks the alliance's human player to drop their chute; the game's rules answer it.
+    if (input.humanDrop && !this.humanDropHeld && sim.humanDrops) this.humanDropAsked = true;
+    this.humanDropHeld = input.humanDrop;
     const rot = this.rotation();
     const drivetrain = this.drivetrain();
     const drive = this.aimedInput(sim, input);

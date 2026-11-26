@@ -30,7 +30,7 @@
     "wheelBase": 0.6,
     "trackWidth": 0.52,
     "wheelRadius": 0.05,
-    "maxSpeed": 4.8,
+    "maxSpeed": 4.32,
     "maxAccel": 9.5,
     "grip": 1.15,
     "maxAngularSpeed": 9.5
